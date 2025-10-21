@@ -43,7 +43,6 @@
   "bugs": {
     "url": "https://github.com/syndicalia/vhs-vault/issues"
   },
-  "homepage": "https://github.com/syndicalia/vhs-vault#readme",
   "browserslist": {
     "production": [
       ">0.2%",
