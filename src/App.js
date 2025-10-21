@@ -43,6 +43,33 @@ export default function VHSCollectionTracker() {
     imageFiles: []
   });
 
+  // Controlled vocabularies & validation
+  const REGION_OPTIONS = [
+    'US (NTSC)', 'Japan (NTSC-J)', 'Europe (PAL)', 'Australia/NZ (PAL)', 'SECAM', 'Other'
+  ];
+  const PACKAGING_OPTIONS = [
+    'Slipcover', 'Clamshell', 'Big Box', 'Library Case', 'Other'
+  ];
+
+  const validateSubmission = () => {
+    // Region & packaging must be one of the dropdown values
+    if (!REGION_OPTIONS.includes(newSubmission.variantRegion)) {
+      alert('Please choose a valid Region from the dropdown.');
+      return false;
+    }
+    if (!PACKAGING_OPTIONS.includes(newSubmission.variantPackaging)) {
+      alert('Please choose a valid Packaging from the dropdown.');
+      return false;
+    }
+    // Release year: 4 numeric digits (allow blank)
+    if (newSubmission.variantRelease && !/^\d{4}$/.test(String(newSubmission.variantRelease))) {
+      alert('Release Year must be a 4-digit number (e.g., 1999).');
+      return false;
+    }
+    return true;
+  };
+
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -761,7 +788,6 @@ export default function VHSCollectionTracker() {
                       <div key={variant.id} className="bg-white rounded-lg shadow p-6">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
-                            <div className="flex items-center space-x-2 
                             <div className="flex items-center space-x-2 mb-2">
                               <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
                                 {variant.format}
@@ -1137,11 +1163,6 @@ export default function VHSCollectionTracker() {
                 <button
                   onClick={() => setShowSubmitModal(false)}
 
-      {/* Lightbox for image previews */}
-      {lightboxOpen && previewImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
-          onClick={() => setLightboxOpen(false)}
         >
           <img
             src={previewImage}
@@ -1261,7 +1282,7 @@ export default function VHSCollectionTracker() {
                         <input
                           type="text"
                           inputMode="numeric"
-                          pattern="\d{4}"
+                          pattern="[0-9]{4}"
                           maxLength={4}
                           value={newSubmission.variantRelease}
                           onChange={(e) => {
@@ -1387,6 +1408,29 @@ export default function VHSCollectionTracker() {
         </div>
       )}
     </div>
+      {/* Lightbox for image previews */}
+      {lightboxOpen && previewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <img
+            src={previewImage}
+            alt="Preview"
+            className="max-h-[90vh] max-w-[90vw] rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            aria-label="Close preview"
+            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
   );
 }
-// END OF FILE - Copy everything above this line-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
