@@ -1,9 +1,7 @@
-// Complete Production-Ready App.js for VHS Vault
-// Copy this ENTIRE file and replace your src/App.js
-
+// Complete Production App.js v2 - With Image Features & Fixed Voting
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle } from 'lucide-react';
+import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Camera } from 'lucide-react';
 
 export default function VHSCollectionTracker() {
   const [user, setUser] = useState(null);
@@ -18,12 +16,14 @@ export default function VHSCollectionTracker() {
   const [ratings, setRatings] = useState([]);
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [marketplace, setMarketplace] = useState([]);
+  const [userVotes, setUserVotes] = useState({});
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMaster, setSelectedMaster] = useState(null);
   const [view, setView] = useState('browse');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitType, setSubmitType] = useState('variant');
+  const [selectedImages, setSelectedImages] = useState([]);
   
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -56,6 +56,7 @@ export default function VHSCollectionTracker() {
   useEffect(() => {
     if (user) {
       loadAllData();
+      loadUserVotes();
     }
   }, [user]);
 
@@ -73,7 +74,7 @@ export default function VHSCollectionTracker() {
   const loadMasterReleases = async () => {
     const { data, error } = await supabase
       .from('master_releases')
-      .select('*, variants(*)');
+      .select('*, variants(*, variant_images(*))');
     
     if (!error && data) {
       setMasterReleases(data);
@@ -110,7 +111,11 @@ export default function VHSCollectionTracker() {
   const loadPendingSubmissions = async () => {
     const { data, error } = await supabase
       .from('variants')
-      .select('*, master_releases(*)')
+      .select(`
+        *,
+        master_releases(*),
+        variant_images(*)
+      `)
       .eq('approved', false);
     
     if (!error) setPendingSubmissions(data || []);
@@ -123,6 +128,21 @@ export default function VHSCollectionTracker() {
       .eq('active', true);
     
     if (!error) setMarketplace(data || []);
+  };
+
+  const loadUserVotes = async () => {
+    const { data, error } = await supabase
+      .from('submission_votes')
+      .select('variant_id, vote_type')
+      .eq('user_id', user.id);
+    
+    if (!error && data) {
+      const votesMap = {};
+      data.forEach(vote => {
+        votesMap[vote.variant_id] = vote.vote_type;
+      });
+      setUserVotes(votesMap);
+    }
   };
 
   const handleAuth = async (e) => {
@@ -217,7 +237,7 @@ export default function VHSCollectionTracker() {
       .select('rating')
       .eq('master_id', masterId);
     
-    if (data) {
+    if (data && data.length > 0) {
       const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
       await supabase
         .from('master_releases')
@@ -229,24 +249,51 @@ export default function VHSCollectionTracker() {
   };
 
   const handleVote = async (variantId, voteType) => {
-    const { data: existing } = await supabase
-      .from('submission_votes')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('variant_id', variantId)
-      .single();
-    
-    if (existing) {
-      if (existing.vote_type === voteType) {
-        await supabase.from('submission_votes').delete().eq('id', existing.id);
-      } else {
-        await supabase.from('submission_votes').update({ vote_type: voteType }).eq('id', existing.id);
+    try {
+      const { data: existing, error: fetchError } = await supabase
+        .from('submission_votes')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('variant_id', variantId)
+        .maybeSingle();
+      
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('Error checking vote:', fetchError);
+        return;
       }
-    } else {
-      await supabase.from('submission_votes').insert([{ user_id: user.id, variant_id: variantId, vote_type: voteType }]);
+      
+      if (existing) {
+        if (existing.vote_type === voteType) {
+          await supabase
+            .from('submission_votes')
+            .delete()
+            .eq('id', existing.id);
+          
+          const newVotes = { ...userVotes };
+          delete newVotes[variantId];
+          setUserVotes(newVotes);
+        } else {
+          await supabase
+            .from('submission_votes')
+            .update({ vote_type: voteType })
+            .eq('id', existing.id);
+          
+          setUserVotes({ ...userVotes, [variantId]: voteType });
+        }
+      } else {
+        await supabase
+          .from('submission_votes')
+          .insert([{ user_id: user.id, variant_id: variantId, vote_type: voteType }]);
+        
+        setUserVotes({ ...userVotes, [variantId]: voteType });
+      }
+      
+      await updateVoteCounts(variantId);
+      await loadPendingSubmissions();
+    } catch (error) {
+      console.error('Vote error:', error);
+      alert('Error voting: ' + error.message);
     }
-    
-    updateVoteCounts(variantId);
   };
 
   const updateVoteCounts = async (variantId) => {
@@ -258,23 +305,44 @@ export default function VHSCollectionTracker() {
     const upVotes = votes?.filter(v => v.vote_type === 'up').length || 0;
     const downVotes = votes?.filter(v => v.vote_type === 'down').length || 0;
     
-    await supabase.from('variants').update({ votes_up: upVotes, votes_down: downVotes }).eq('id', variantId);
-    loadPendingSubmissions();
+    await supabase
+      .from('variants')
+      .update({ votes_up: upVotes, votes_down: downVotes })
+      .eq('id', variantId);
   };
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
-    setNewSubmission({ ...newSubmission, imageFiles: [...newSubmission.imageFiles, ...files] });
+    const currentCount = newSubmission.imageFiles.length;
+    const remaining = 5 - currentCount;
+    
+    if (files.length > remaining) {
+      alert(`You can only upload ${remaining} more image(s). Maximum is 5 images per variant.`);
+      return;
+    }
+    
+    const filesWithPreviews = files.map(file => ({
+      file,
+      preview: URL.createObjectURL(file)
+    }));
+    
+    setNewSubmission({ 
+      ...newSubmission, 
+      imageFiles: [...newSubmission.imageFiles, ...filesWithPreviews] 
+    });
   };
 
   const removeImage = (index) => {
-    const newFiles = newSubmission.imageFiles.filter((_, i) => i !== index);
+    const newFiles = [...newSubmission.imageFiles];
+    URL.revokeObjectURL(newFiles[index].preview);
+    newFiles.splice(index, 1);
     setNewSubmission({ ...newSubmission, imageFiles: newFiles });
   };
 
   const uploadImages = async (variantId) => {
     for (let i = 0; i < newSubmission.imageFiles.length; i++) {
-      const file = newSubmission.imageFiles[i];
+      const fileObj = newSubmission.imageFiles[i];
+      const file = fileObj.file;
       const fileExt = file.name.split('.').pop();
       const fileName = `${variantId}-${Date.now()}-${i}.${fileExt}`;
 
@@ -596,7 +664,7 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-gray-800">Variants ({selectedMaster.variants?.length || 0})</h3>
+                  <h3 className="text-xl font-bold text-gray-800">Variants ({selectedMaster.variants?.filter(v => v.approved).length || 0})</h3>
                   <button
                     onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition flex items-center space-x-2"
@@ -641,6 +709,27 @@ export default function VHSCollectionTracker() {
                             <p className="text-xs text-gray-500 mt-2">
                               {variant.votes_up || 0} 👍 {variant.votes_down || 0} 👎
                             </p>
+                            
+                            {variant.variant_images && variant.variant_images.length > 0 && (
+                              <div className="mt-3">
+                                <div className="flex items-center space-x-2 overflow-x-auto">
+                                  {variant.variant_images.slice(0, 4).map((img, idx) => (
+                                    <img
+                                      key={idx}
+                                      src={img.image_url}
+                                      alt={`Variant ${idx + 1}`}
+                                      className="w-16 h-16 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                      onClick={() => window.open(img.image_url, '_blank')}
+                                    />
+                                  ))}
+                                  {variant.variant_images.length > 4 && (
+                                    <div className="w-16 h-16 bg-gray-200 rounded border-2 border-gray-300 flex items-center justify-center text-gray-600 text-sm font-medium">
+                                      +{variant.variant_images.length - 4}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="ml-4 flex flex-col space-y-2">
                             <button
@@ -822,66 +911,96 @@ export default function VHSCollectionTracker() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {pendingSubmissions.map(submission => (
-                  <div key={submission.id} className="bg-white rounded-lg shadow p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
-                        Pending Review
-                      </span>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleVote(submission.id, 'up')}
-                          className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-green-100 transition"
-                        >
-                          <ThumbsUp className="w-5 h-5" />
-                        </button>
-                        <span className="text-sm font-medium">{submission.votes_up || 0}</span>
-                        <button
-                          onClick={() => handleVote(submission.id, 'down')}
-                          className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-red-100 transition"
-                        >
-                          <ThumbsDown className="w-5 h-5" />
-                        </button>
-                        <span className="text-sm font-medium">{submission.votes_down || 0}</span>
+                {pendingSubmissions.map(submission => {
+                  const userVote = userVotes[submission.id];
+                  return (
+                    <div key={submission.id} className="bg-white rounded-lg shadow p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+                          Pending Review
+                        </span>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleVote(submission.id, 'up')}
+                            className={`p-2 rounded-lg transition ${
+                              userVote === 'up'
+                                ? 'bg-green-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-green-100'
+                            }`}
+                          >
+                            <ThumbsUp className="w-5 h-5" />
+                          </button>
+                          <span className="text-sm font-medium">{submission.votes_up || 0}</span>
+                          <button
+                            onClick={() => handleVote(submission.id, 'down')}
+                            className={`p-2 rounded-lg transition ${
+                              userVote === 'down'
+                                ? 'bg-red-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-red-100'
+                            }`}
+                          >
+                            <ThumbsDown className="w-5 h-5" />
+                          </button>
+                          <span className="text-sm font-medium">{submission.votes_down || 0}</span>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <h3 className="text-xl font-bold text-gray-800 mb-2">
-                      New Variant for: {submission.master_releases.title}
-                    </h3>
-                    
-                    <div className="grid md:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-700 mb-1">Format</p>
-                        <p className="text-gray-600">{submission.format}</p>
+                      
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">
+                        New Variant for: {submission.master_releases.title}
+                      </h3>
+                      
+                      <div className="grid md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700 mb-1">Format</p>
+                          <p className="text-gray-600">{submission.format}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700 mb-1">Region</p>
+                          <p className="text-gray-600">{submission.region}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700 mb-1">Release Year</p>
+                          <p className="text-gray-600">{submission.release_year}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700 mb-1">Packaging</p>
+                          <p className="text-gray-600">{submission.packaging}</p>
+                        </div>
+                        {submission.barcode && (
+                          <div className="md:col-span-2">
+                            <p className="text-sm font-semibold text-gray-700 mb-1">Barcode</p>
+                            <p className="text-gray-600">{submission.barcode}</p>
+                          </div>
+                        )}
+                        {submission.notes && (
+                          <div className="md:col-span-2">
+                            <p className="text-sm font-semibold text-gray-700 mb-1">Notes</p>
+                            <p className="text-gray-600 italic">{submission.notes}</p>
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-gray-700 mb-1">Region</p>
-                        <p className="text-gray-600">{submission.region}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-gray-700 mb-1">Release Year</p>
-                        <p className="text-gray-600">{submission.release_year}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-gray-700 mb-1">Packaging</p>
-                        <p className="text-gray-600">{submission.packaging}</p>
-                      </div>
-                      {submission.barcode && (
-                        <div className="md:col-span-2">
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Barcode</p>
-                          <p className="text-gray-600">{submission.barcode}</p>
+
+                      {submission.variant_images && submission.variant_images.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-sm font-semibold text-gray-700 mb-2">
+                            Images ({submission.variant_images.length})
+                          </p>
+                          <div className="grid grid-cols-5 gap-2">
+                            {submission.variant_images.map((img, idx) => (
+                              <img
+                                key={idx}
+                                src={img.image_url}
+                                alt={`Submission image ${idx + 1}`}
+                                className="w-full h-24 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                onClick={() => window.open(img.image_url, '_blank')}
+                              />
+                            ))}
+                          </div>
                         </div>
                       )}
-                      {submission.notes && (
-                        <div className="md:col-span-2">
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Notes</p>
-                          <p className="text-gray-600 italic">{submission.notes}</p>
-                        </div>
-                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
@@ -1036,7 +1155,9 @@ export default function VHSCollectionTracker() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Upload Images</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Upload Images (Max 5)
+                      </label>
                       <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                         <input
                           type="file"
@@ -1045,26 +1166,43 @@ export default function VHSCollectionTracker() {
                           onChange={handleImageUpload}
                           className="hidden"
                           id="image-upload"
+                          disabled={newSubmission.imageFiles.length >= 5}
                         />
-                        <label htmlFor="image-upload" className="cursor-pointer">
+                        <label 
+                          htmlFor="image-upload" 
+                          className={`cursor-pointer ${newSubmission.imageFiles.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
                           <Upload className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                          <p className="text-gray-600">Click to upload images</p>
-                          <p className="text-sm text-gray-500 mt-1">Front, back, spine, and any special features</p>
+                          <p className="text-gray-600">
+                            {newSubmission.imageFiles.length >= 5 
+                              ? 'Maximum 5 images reached' 
+                              : 'Click to upload images'
+                            }
+                          </p>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {newSubmission.imageFiles.length}/5 images • Front, back, spine, special features
+                          </p>
                         </label>
                       </div>
                       {newSubmission.imageFiles.length > 0 && (
-                        <div className="mt-4 grid grid-cols-4 gap-2">
-                          {newSubmission.imageFiles.map((file, idx) => (
-                            <div key={idx} className="relative">
-                              <div className="w-full h-24 bg-gray-200 rounded border flex items-center justify-center">
-                                <p className="text-xs text-gray-600 px-2 text-center">{file.name}</p>
-                              </div>
+                        <div className="mt-4 grid grid-cols-5 gap-2">
+                          {newSubmission.imageFiles.map((fileObj, idx) => (
+                            <div key={idx} className="relative group">
+                              <img 
+                                src={fileObj.preview} 
+                                alt={`Preview ${idx + 1}`} 
+                                className="w-full h-24 object-cover rounded border-2 border-gray-300"
+                              />
                               <button
+                                type="button"
                                 onClick={() => removeImage(idx)}
-                                className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                                className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
                               >
                                 <X className="w-3 h-3" />
                               </button>
+                              <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs text-center py-1 rounded-b">
+                                Image {idx + 1}
+                              </div>
                             </div>
                           ))}
                         </div>
