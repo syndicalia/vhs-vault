@@ -1179,7 +1179,7 @@ export default function VHSCollectionTracker() {
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
           </button>
-        </div>
+	  </button></div>
       )}
 
                   className="p-2 hover:bg-gray-100 rounded-lg transition"
