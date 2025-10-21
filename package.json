@@ -20,7 +20,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-is": "^17.0.2",
-    "react-scripts": "^0.0.0",
+    "react-scripts": "^5.0.1",
     "redent": "^3.0.0",
     "scheduler": "^0.27.0",
     "strip-indent": "^3.0.0",
@@ -43,5 +43,17 @@
   "bugs": {
     "url": "https://github.com/syndicalia/vhs-vault/issues"
   },
-  "homepage": "https://github.com/syndicalia/vhs-vault#readme"
+  "homepage": "https://github.com/syndicalia/vhs-vault#readme",
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
 }
