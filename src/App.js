@@ -1185,7 +1185,7 @@ export default function VHSCollectionTracker() {
                   className="p-2 hover:bg-gray-100 rounded-lg transition"
                 >
                   <X className="w-6 h-6" />
-                </button>
+                </div>
               </div>
 
               <div className="space-y-4">
