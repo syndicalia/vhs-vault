@@ -1,4 +1,6 @@
-// src/App.js - COMPLETE PRODUCTION VERSION
+// Complete Production-Ready App.js for VHS Vault
+// Copy this ENTIRE file and replace your src/App.js
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle } from 'lucide-react';
@@ -38,7 +40,6 @@ export default function VHSCollectionTracker() {
     imageFiles: []
   });
 
-  // Auth state
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -52,7 +53,6 @@ export default function VHSCollectionTracker() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load data
   useEffect(() => {
     if (user) {
       loadAllData();
@@ -273,12 +273,10 @@ export default function VHSCollectionTracker() {
   };
 
   const uploadImages = async (variantId) => {
-    const uploadedUrls = [];
-    
     for (let i = 0; i < newSubmission.imageFiles.length; i++) {
       const file = newSubmission.imageFiles[i];
       const fileExt = file.name.split('.').pop();
-      const fileName = `${variantId}-${i}.${fileExt}`;
+      const fileName = `${variantId}-${Date.now()}-${i}.${fileExt}`;
 
       const { error } = await supabase.storage
         .from('variant-images')
@@ -286,7 +284,6 @@ export default function VHSCollectionTracker() {
 
       if (!error) {
         const { data } = supabase.storage.from('variant-images').getPublicUrl(fileName);
-        uploadedUrls.push(data.publicUrl);
         
         await supabase.from('variant_images').insert([{
           variant_id: variantId,
@@ -295,8 +292,6 @@ export default function VHSCollectionTracker() {
         }]);
       }
     }
-    
-    return uploadedUrls;
   };
 
   const handleSubmitEntry = async () => {
@@ -527,7 +522,172 @@ export default function VHSCollectionTracker() {
                     <div className="flex justify-between items-start">
                       <div>
                         <h2 className="text-xl font-bold text-gray-800 mb-1">{master.title}</h2>
-                        <p className="text-gray-500 mt-2">Browse the database to add tapes</p>
+                        <p className="text-gray-600">{master.director} • {master.year} • {master.genre}</p>
+                        <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
+                        <div className="flex items-center space-x-4 mt-3">
+                          <div className="flex items-center space-x-1">
+                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                            <span className="font-medium">{master.avg_rating || 0}</span>
+                            <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
+                          </div>
+                          <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
+                        </div>
+                      </div>
+                      <div className="text-2xl">🎬</div>
+                    </div>
+                  </div>
+                ))}
+                {filteredMasters.length === 0 && (
+                  <div className="bg-white rounded-lg shadow p-12 text-center">
+                    <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 text-lg">No titles found</p>
+                    <p className="text-gray-500 mt-2">Try a different search or add a new title</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <button
+                  onClick={() => setSelectedMaster(null)}
+                  className="mb-4 text-purple-600 hover:text-purple-700 font-medium"
+                >
+                  ← Back to list
+                </button>
+                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2">{selectedMaster.title}</h2>
+                      <p className="text-gray-600 mb-1">Directed by {selectedMaster.director}</p>
+                      <p className="text-gray-600 mb-1">Released: {selectedMaster.year}</p>
+                      <p className="text-gray-600 mb-1">Studio: {selectedMaster.studio}</p>
+                      <p className="text-gray-600 mb-3">Genre: {selectedMaster.genre}</p>
+                      
+                      <div className="flex items-center space-x-4 mb-4">
+                        <div className="flex items-center space-x-1">
+                          <Star className="w-5 h-5 text-yellow-500 fill-current" />
+                          <span className="font-bold text-lg">{selectedMaster.avg_rating || 0}</span>
+                          <span className="text-gray-500">({selectedMaster.total_ratings || 0} ratings)</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t pt-4">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Your Rating:</p>
+                        <div className="flex space-x-1">
+                          {[1, 2, 3, 4, 5].map(star => (
+                            <button
+                              key={star}
+                              onClick={() => setRating(selectedMaster.id, star)}
+                              className="focus:outline-none"
+                            >
+                              <Star
+                                className={`w-6 h-6 ${
+                                  star <= getUserRating(selectedMaster.id)
+                                    ? 'text-yellow-500 fill-current'
+                                    : 'text-gray-300'
+                                } hover:text-yellow-400 transition`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-4xl">🎬</div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-800">Variants ({selectedMaster.variants?.length || 0})</h3>
+                  <button
+                    onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition flex items-center space-x-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Variant</span>
+                  </button>
+                </div>
+
+                <div className="grid gap-4">
+                  {selectedMaster.variants?.filter(v => v.approved).map(variant => {
+                    const inColl = isInCollection(variant.id);
+                    const inWish = isInWishlist(variant.id);
+                    return (
+                      <div key={variant.id} className="bg-white rounded-lg shadow p-6">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                                {variant.format}
+                              </span>
+                              <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                                {variant.region}
+                              </span>
+                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm flex items-center space-x-1">
+                                <Check className="w-3 h-3" />
+                                <span>Verified</span>
+                              </span>
+                            </div>
+                            <p className="text-gray-700 mb-1">
+                              <span className="font-semibold">Release:</span> {variant.release_year}
+                            </p>
+                            <p className="text-gray-700 mb-1">
+                              <span className="font-semibold">Packaging:</span> {variant.packaging}
+                            </p>
+                            <p className="text-gray-700 mb-1">
+                              <span className="font-semibold">Barcode:</span> {variant.barcode}
+                            </p>
+                            {variant.notes && (
+                              <p className="text-gray-600 text-sm mt-2 italic">{variant.notes}</p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-2">
+                              {variant.votes_up || 0} 👍 {variant.votes_down || 0} 👎
+                            </p>
+                          </div>
+                          <div className="ml-4 flex flex-col space-y-2">
+                            <button
+                              onClick={() => {
+                                if (inColl) {
+                                  removeFromCollection(variant.id);
+                                } else {
+                                  addToCollection(selectedMaster.id, variant.id);
+                                }
+                              }}
+                              className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-2 ${
+                                inColl
+                                  ? 'bg-red-500 text-white hover:bg-red-600'
+                                  : 'bg-purple-600 text-white hover:bg-purple-700'
+                              }`}
+                            >
+                              {inColl ? <><X className="w-4 h-4" /><span>Remove</span></> : <><Plus className="w-4 h-4" /><span>Add</span></>}
+                            </button>
+                            <button
+                              onClick={() => toggleWishlist(selectedMaster.id, variant.id)}
+                              className={`px-4 py-2 rounded-lg font-medium transition flex items-center justify-center ${
+                                inWish
+                                  ? 'bg-pink-500 text-white hover:bg-pink-600'
+                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                              }`}
+                            >
+                              <Heart className={`w-4 h-4 ${inWish ? 'fill-current' : ''}`} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {view === 'collection' && (
+          <>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">My Collection</h2>
+            {collection.length === 0 ? (
+              <div className="bg-white rounded-lg shadow p-12 text-center">
+                <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 text-lg">Your collection is empty</p>
+                <p className="text-gray-500 mt-2">Browse the database to add tapes</p>
               </div>
             ) : (
               <div className="grid gap-4">
@@ -945,174 +1105,5 @@ export default function VHSCollectionTracker() {
         </div>
       )}
     </div>
-  );
-}text-gray-600">{master.director} • {master.year} • {master.genre}</p>
-                        <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
-                        <div className="flex items-center space-x-4 mt-3">
-                          <div className="flex items-center space-x-1">
-                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                            <span className="font-medium">{master.avg_rating || 0}</span>
-                            <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
-                          </div>
-                          <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
-                        </div>
-                      </div>
-                      <div className="text-2xl">🎬</div>
-                    </div>
-                  </div>
-                ))}
-                {filteredMasters.length === 0 && (
-                  <div className="bg-white rounded-lg shadow p-12 text-center">
-                    <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg">No titles found</p>
-                    <p className="text-gray-500 mt-2">Try a different search or add a new title</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                <button
-                  onClick={() => setSelectedMaster(null)}
-                  className="mb-4 text-purple-600 hover:text-purple-700 font-medium"
-                >
-                  ← Back to list
-                </button>
-                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-800 mb-2">{selectedMaster.title}</h2>
-                      <p className="text-gray-600 mb-1">Directed by {selectedMaster.director}</p>
-                      <p className="text-gray-600 mb-1">Released: {selectedMaster.year}</p>
-                      <p className="text-gray-600 mb-1">Studio: {selectedMaster.studio}</p>
-                      <p className="text-gray-600 mb-3">Genre: {selectedMaster.genre}</p>
-                      
-                      <div className="flex items-center space-x-4 mb-4">
-                        <div className="flex items-center space-x-1">
-                          <Star className="w-5 h-5 text-yellow-500 fill-current" />
-                          <span className="font-bold text-lg">{selectedMaster.avg_rating || 0}</span>
-                          <span className="text-gray-500">({selectedMaster.total_ratings || 0} ratings)</span>
-                        </div>
-                      </div>
-
-                      <div className="border-t pt-4">
-                        <p className="text-sm font-medium text-gray-700 mb-2">Your Rating:</p>
-                        <div className="flex space-x-1">
-                          {[1, 2, 3, 4, 5].map(star => (
-                            <button
-                              key={star}
-                              onClick={() => setRating(selectedMaster.id, star)}
-                              className="focus:outline-none"
-                            >
-                              <Star
-                                className={`w-6 h-6 ${
-                                  star <= getUserRating(selectedMaster.id)
-                                    ? 'text-yellow-500 fill-current'
-                                    : 'text-gray-300'
-                                } hover:text-yellow-400 transition`}
-                              />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-4xl">🎬</div>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-gray-800">Variants ({selectedMaster.variants?.length || 0})</h3>
-                  <button
-                    onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition flex items-center space-x-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Variant</span>
-                  </button>
-                </div>
-
-                <div className="grid gap-4">
-                  {selectedMaster.variants?.filter(v => v.approved).map(variant => {
-                    const inColl = isInCollection(variant.id);
-                    const inWish = isInWishlist(variant.id);
-                    return (
-                      <div key={variant.id} className="bg-white rounded-lg shadow p-6">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
-                                {variant.format}
-                              </span>
-                              <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
-                                {variant.region}
-                              </span>
-                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm flex items-center space-x-1">
-                                <Check className="w-3 h-3" />
-                                <span>Verified</span>
-                              </span>
-                            </div>
-                            <p className="text-gray-700 mb-1">
-                              <span className="font-semibold">Release:</span> {variant.release_year}
-                            </p>
-                            <p className="text-gray-700 mb-1">
-                              <span className="font-semibold">Packaging:</span> {variant.packaging}
-                            </p>
-                            <p className="text-gray-700 mb-1">
-                              <span className="font-semibold">Barcode:</span> {variant.barcode}
-                            </p>
-                            {variant.notes && (
-                              <p className="text-gray-600 text-sm mt-2 italic">{variant.notes}</p>
-                            )}
-                            <p className="text-xs text-gray-500 mt-2">
-                              {variant.votes_up || 0} 👍 {variant.votes_down || 0} 👎
-                            </p>
-                          </div>
-                          <div className="ml-4 flex flex-col space-y-2">
-                            <button
-                              onClick={() => {
-                                if (inColl) {
-                                  removeFromCollection(variant.id);
-                                } else {
-                                  addToCollection(selectedMaster.id, variant.id);
-                                }
-                              }}
-                              className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-2 ${
-                                inColl
-                                  ? 'bg-red-500 text-white hover:bg-red-600'
-                                  : 'bg-purple-600 text-white hover:bg-purple-700'
-                              }`}
-                            >
-                              {inColl ? <><X className="w-4 h-4" /><span>Remove</span></> : <><Plus className="w-4 h-4" /><span>Add</span></>}
-                            </button>
-                            <button
-                              onClick={() => toggleWishlist(selectedMaster.id, variant.id)}
-                              className={`px-4 py-2 rounded-lg font-medium transition flex items-center justify-center ${
-                                inWish
-                                  ? 'bg-pink-500 text-white hover:bg-pink-600'
-                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                              }`}
-                            >
-                              <Heart className={`w-4 h-4 ${inWish ? 'fill-current' : ''}`} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {view === 'collection' && (
-          <>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">My Collection</h2>
-            {collection.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-12 text-center">
-                <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">Your collection is empty</p>
-                <p className="
-				
-				</div>
   );
 }
