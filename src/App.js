@@ -17,7 +17,7 @@ export default function VHSCollectionTracker() {
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [marketplace, setMarketplace] = useState([]);
   const [userVotes, setUserVotes] = useState({});
-  
+  const [isAdmin, setIsAdmin] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMaster, setSelectedMaster] = useState(null);
   const [view, setView] = useState('browse');
@@ -59,7 +59,18 @@ export default function VHSCollectionTracker() {
       loadUserVotes();
     }
   }, [user]);
-
+useEffect(() => {
+  if (user) {
+    const checkAdmin = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (!error && data.user) {
+        const role = data.user.user_metadata?.role;
+        setIsAdmin(role === 'admin');
+      }
+    };
+    checkAdmin();
+  }
+}, [user]);
   const loadAllData = async () => {
     await Promise.all([
       loadMasterReleases(),
@@ -295,6 +306,59 @@ export default function VHSCollectionTracker() {
       alert('Error voting: ' + error.message);
     }
   };
+const approveSubmission = async (variantId) => {
+  try {
+    const { error } = await supabase
+      .from('variants')
+      .update({ approved: true })
+      .eq('id', variantId);
+    
+    if (error) throw error;
+    
+    alert('Submission approved!');
+    await loadPendingSubmissions();
+    await loadMasterReleases();
+  } catch (error) {
+    alert('Error approving submission: ' + error.message);
+  }
+};
+
+const rejectSubmission = async (variantId) => {
+  if (!confirm('Are you sure you want to reject this submission? This will delete it permanently.')) {
+    return;
+  }
+  
+  try {
+    // Delete associated images first
+    const { data: images } = await supabase
+      .from('variant_images')
+      .select('image_url')
+      .eq('variant_id', variantId);
+    
+    if (images) {
+      for (const img of images) {
+        // Extract filename from URL and delete from storage
+        const fileName = img.image_url.split('/').pop();
+        await supabase.storage
+          .from('variant-images')
+          .remove([fileName]);
+      }
+    }
+    
+    // Delete the variant (will cascade delete images and votes)
+    const { error } = await supabase
+      .from('variants')
+      .delete()
+      .eq('id', variantId);
+    
+    if (error) throw error;
+    
+    alert('Submission rejected and deleted.');
+    await loadPendingSubmissions();
+  } catch (error) {
+    alert('Error rejecting submission: ' + error.message);
+  }
+};
 
   const updateVoteCounts = async (variantId) => {
     const { data: votes } = await supabase
@@ -535,7 +599,15 @@ export default function VHSCollectionTracker() {
           </div>
         </div>
       </div>
-
+<div className="hidden md:flex items-center space-x-2 bg-purple-700 px-4 py-2 rounded-lg">
+  <User className="w-5 h-5" />
+  <span className="text-sm">{user.email}</span>
+  {isAdmin && (
+    <span className="ml-2 bg-yellow-400 text-purple-900 px-2 py-0.5 rounded text-xs font-bold">
+      ADMIN
+    </span>
+  )}
+</div>
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-2 md:space-x-8 overflow-x-auto">
@@ -901,111 +973,150 @@ export default function VHSCollectionTracker() {
         )}
 
         {view === 'pending' && (
-          <>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Pending Submissions</h2>
-            <p className="text-gray-600 mb-6">Vote on community submissions to help maintain database quality</p>
-            {pendingSubmissions.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-12 text-center">
-                <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">No pending submissions</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {pendingSubmissions.map(submission => {
-                  const userVote = userVotes[submission.id];
-                  return (
-                    <div key={submission.id} className="bg-white rounded-lg shadow p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
-                          Pending Review
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => handleVote(submission.id, 'up')}
-                            className={`p-2 rounded-lg transition ${
-                              userVote === 'up'
-                                ? 'bg-green-500 text-white'
-                                : 'bg-gray-100 text-gray-600 hover:bg-green-100'
-                            }`}
-                          >
-                            <ThumbsUp className="w-5 h-5" />
-                          </button>
-                          <span className="text-sm font-medium">{submission.votes_up || 0}</span>
-                          <button
-                            onClick={() => handleVote(submission.id, 'down')}
-                            className={`p-2 rounded-lg transition ${
-                              userVote === 'down'
-                                ? 'bg-red-500 text-white'
-                                : 'bg-gray-100 text-gray-600 hover:bg-red-100'
-                            }`}
-                          >
-                            <ThumbsDown className="w-5 h-5" />
-                          </button>
-                          <span className="text-sm font-medium">{submission.votes_down || 0}</span>
-                        </div>
-                      </div>
-                      
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">
-                        New Variant for: {submission.master_releases.title}
-                      </h3>
-                      
-                      <div className="grid md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Format</p>
-                          <p className="text-gray-600">{submission.format}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Region</p>
-                          <p className="text-gray-600">{submission.region}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Release Year</p>
-                          <p className="text-gray-600">{submission.release_year}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Packaging</p>
-                          <p className="text-gray-600">{submission.packaging}</p>
-                        </div>
-                        {submission.barcode && (
-                          <div className="md:col-span-2">
-                            <p className="text-sm font-semibold text-gray-700 mb-1">Barcode</p>
-                            <p className="text-gray-600">{submission.barcode}</p>
-                          </div>
-                        )}
-                        {submission.notes && (
-                          <div className="md:col-span-2">
-                            <p className="text-sm font-semibold text-gray-700 mb-1">Notes</p>
-                            <p className="text-gray-600 italic">{submission.notes}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {submission.variant_images && submission.variant_images.length > 0 && (
-                        <div className="mt-4">
-                          <p className="text-sm font-semibold text-gray-700 mb-2">
-                            Images ({submission.variant_images.length})
-                          </p>
-                          <div className="grid grid-cols-5 gap-2">
-                            {submission.variant_images.map((img, idx) => (
-                              <img
-                                key={idx}
-                                src={img.image_url}
-                                alt={`Submission image ${idx + 1}`}
-                                className="w-full h-24 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                onClick={() => window.open(img.image_url, '_blank')}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
+  <>
+    <div className="flex justify-between items-center mb-2">
+      <h2 className="text-2xl font-bold text-gray-800">Pending Submissions</h2>
+      {isAdmin && (
+        <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+          Admin Mode
+        </span>
+      )}
+    </div>
+    <p className="text-gray-600 mb-6">
+      {isAdmin 
+        ? 'Review and approve/reject community submissions' 
+        : 'Vote on community submissions to help maintain database quality'
+      }
+    </p>
+    {pendingSubmissions.length === 0 ? (
+      <div className="bg-white rounded-lg shadow p-12 text-center">
+        <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <p className="text-gray-600 text-lg">No pending submissions</p>
       </div>
+    ) : (
+      <div className="grid gap-4">
+        {pendingSubmissions.map(submission => {
+          const userVote = userVotes[submission.id];
+          return (
+            <div key={submission.id} className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-start justify-between mb-4">
+                <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+                  Pending Review
+                </span>
+                {isAdmin ? (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => approveSubmission(submission.id)}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center space-x-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Approve</span>
+                    </button>
+                    <button
+                      onClick={() => rejectSubmission(submission.id)}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center space-x-2"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>Reject</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleVote(submission.id, 'up')}
+                      className={`p-2 rounded-lg transition ${
+                        userVote === 'up'
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-green-100'
+                      }`}
+                    >
+                      <ThumbsUp className="w-5 h-5" />
+                    </button>
+                    <span className="text-sm font-medium">{submission.votes_up || 0}</span>
+                    <button
+                      onClick={() => handleVote(submission.id, 'down')}
+                      className={`p-2 rounded-lg transition ${
+                        userVote === 'down'
+                          ? 'bg-red-500 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-red-100'
+                      }`}
+                    >
+                      <ThumbsDown className="w-5 h-5" />
+                    </button>
+                    <span className="text-sm font-medium">{submission.votes_down || 0}</span>
+                  </div>
+                )}
+              </div>
+              
+              <h3 className="text-xl font-bold text-gray-800 mb-2">
+                New Variant for: {submission.master_releases.title}
+              </h3>
+              
+              <div className="grid md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-1">Format</p>
+                  <p className="text-gray-600">{submission.format}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-1">Region</p>
+                  <p className="text-gray-600">{submission.region}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-1">Release Year</p>
+                  <p className="text-gray-600">{submission.release_year}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-1">Packaging</p>
+                  <p className="text-gray-600">{submission.packaging}</p>
+                </div>
+                {submission.barcode && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm font-semibold text-gray-700 mb-1">Barcode</p>
+                    <p className="text-gray-600">{submission.barcode}</p>
+                  </div>
+                )}
+                {submission.notes && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm font-semibold text-gray-700 mb-1">Notes</p>
+                    <p className="text-gray-600 italic">{submission.notes}</p>
+                  </div>
+                )}
+              </div>
+
+              {submission.variant_images && submission.variant_images.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm font-semibold text-gray-700 mb-2">
+                    Images ({submission.variant_images.length})
+                  </p>
+                  <div className="grid grid-cols-5 gap-2">
+                    {submission.variant_images.map((img, idx) => (
+                      <img
+                        key={idx}
+                        src={img.image_url}
+                        alt={`Submission image ${idx + 1}`}
+                        className="w-full h-24 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                        onClick={() => window.open(img.image_url, '_blank')}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!isAdmin && (
+                <div className="mt-4 pt-4 border-t">
+                  <p className="text-xs text-gray-500">
+                    Community votes: {submission.votes_up || 0} 👍 {submission.votes_down || 0} 👎
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </>
+)}
+
 
       {showSubmitModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
