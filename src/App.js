@@ -1086,23 +1086,11 @@ export default function VHSCollectionTracker() {
                       <div
                         key={movie.id}
                         onClick={async () => {
-                          // Check if this movie exists in our database
-                          const { data: existing } = await supabase
-                            .from('master_releases')
-                            .select('*, variants(*, variant_images(*))')
-                            .eq('title', movie.title)
-                            .eq('year', movie.release_date ? parseInt(movie.release_date.substring(0, 4)) : 0)
-                            .maybeSingle();
-
-                          if (existing) {
-                            setSelectedMaster(existing);
-                            setSearchTerm('');
-                            setShowTmdbDropdown(false);
-                            setTmdbSearchResults([]);
-                          } else {
-                            alert(`"${movie.title}" is not in our database yet. Click "Add New Title" to submit it!`);
-                            setShowTmdbDropdown(false);
-                          }
+                          // Auto-fill the form with TMDB data and open submit modal
+                          await selectTmdbMovie(movie);
+                          setSearchTerm('');
+                          setShowSubmitModal(true);
+                          setSubmitType('master');
                         }}
                         className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                       >
