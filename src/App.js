@@ -1477,10 +1477,6 @@ export default function VHSCollectionTracker() {
                         )}
                       </div>
 
-                      <h3 className="text-xl font-bold text-gray-800 mb-4">
-                        New Variant for: {submission.master_releases.title}
-                      </h3>
-
                       <div className="flex gap-4 items-start">
                         {/* Variant Images - Left Side */}
                         {submission.variant_images && submission.variant_images.length > 0 ? (
@@ -1518,6 +1514,9 @@ export default function VHSCollectionTracker() {
 
                         {/* Variant Info - Center/Right */}
                         <div className="flex-1">
+                          <h3 className="text-xl font-bold text-gray-800 mb-3">
+                            New Variant for: {submission.master_releases.title}
+                          </h3>
                           <div className="grid md:grid-cols-2 gap-4 mb-4">
                             <div>
                               <p className="text-sm font-semibold text-gray-700 mb-1">Format</p>
