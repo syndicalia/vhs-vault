@@ -25,6 +25,7 @@ export default function VHSCollectionTracker() {
   const [submitType, setSubmitType] = useState('variant');
   const [lightboxImage, setLightboxImage] = useState(null);
   const [editingVariant, setEditingVariant] = useState(null);
+  const [editingMaster, setEditingMaster] = useState(null);
   const regionOptions = [
   'NTSC (USA/Canada)',
   'NTSC (Japan)',
@@ -434,6 +435,75 @@ const updateVariant = async () => {
     alert('Error updating variant: ' + error.message);
   }
 };
+const deleteMasterRelease = async (masterId) => {
+  if (!window.confirm('Are you sure you want to delete this title and ALL its variants permanently? This cannot be undone.')) {
+    return;
+  }
+  
+  try {
+    // Get all variants for this master
+    const { data: variants } = await supabase
+      .from('variants')
+      .select('id')
+      .eq('master_id', masterId);
+    
+    // Delete all related data for each variant
+    if (variants && variants.length > 0) {
+      for (const variant of variants) {
+        await supabase.from('variant_images').delete().eq('variant_id', variant.id);
+        await supabase.from('submission_votes').delete().eq('variant_id', variant.id);
+        await supabase.from('user_collections').delete().eq('variant_id', variant.id);
+        await supabase.from('user_wishlists').delete().eq('variant_id', variant.id);
+      }
+      
+      // Delete all variants
+      await supabase.from('variants').delete().eq('master_id', masterId);
+    }
+    
+    // Delete ratings for this master
+    await supabase.from('user_ratings').delete().eq('master_id', masterId);
+    
+    // Delete marketplace listings
+    await supabase.from('marketplace_listings').delete().eq('master_id', masterId);
+    
+    // Finally delete the master release
+    const { error } = await supabase
+      .from('master_releases')
+      .delete()
+      .eq('id', masterId);
+    
+    if (error) throw error;
+    
+    alert('Title deleted successfully!');
+    setSelectedMaster(null);
+    await loadMasterReleases();
+  } catch (error) {
+    alert('Error deleting title: ' + error.message);
+  }
+};
+
+const updateMasterRelease = async () => {
+  try {
+    const { error } = await supabase
+      .from('master_releases')
+      .update({
+        title: editingMaster.title,
+        year: parseInt(editingMaster.year),
+        director: editingMaster.director,
+        studio: editingMaster.studio,
+        genre: editingMaster.genre
+      })
+      .eq('id', editingMaster.id);
+    
+    if (error) throw error;
+    
+    alert('Title updated successfully!');
+    setEditingMaster(null);
+    await loadMasterReleases();
+  } catch (error) {
+    alert('Error updating title: ' + error.message);
+  }
+};
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     const currentCount = newSubmission.imageFiles.length;
@@ -787,7 +857,31 @@ const updateVariant = async () => {
                         </div>
                       </div>
                     </div>
-                    <div className="text-4xl">🎬</div>
+                    <div className="flex flex-col space-y-2">
+  <div className="text-4xl">🎬</div>
+  {isAdmin && (
+    <>
+      <button
+        onClick={() => setEditingMaster(selectedMaster)}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center space-x-2"
+        title="Edit Title"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+        <span>Edit</span>
+      </button>
+      <button
+        onClick={() => deleteMasterRelease(selectedMaster.id)}
+        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center justify-center space-x-2"
+        title="Delete Title"
+      >
+        <X className="w-4 h-4" />
+        <span>Delete</span>
+      </button>
+    </>
+  )}
+</div>
                   </div>
                 </div>
 
@@ -1533,6 +1627,99 @@ const updateVariant = async () => {
             </button>
             <button
               onClick={updateVariant}
+              className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+{editingMaster && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-800">Edit Title</h2>
+          <button
+            onClick={() => setEditingMaster(null)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+            <input
+              type="text"
+              value={editingMaster.title}
+              onChange={(e) => setEditingMaster({...editingMaster, title: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="Enter movie title"
+            />
+          </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
+              <input
+                type="text"
+                value={editingMaster.year}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || /^\d{1,4}$/.test(value)) {
+                    setEditingMaster({...editingMaster, year: value});
+                  }
+                }}
+                maxLength="4"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="1999"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Genre</label>
+              <input
+                type="text"
+                value={editingMaster.genre}
+                onChange={(e) => setEditingMaster({...editingMaster, genre: e.target.value})}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="Action, Drama, etc."
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Director</label>
+            <input
+              type="text"
+              value={editingMaster.director}
+              onChange={(e) => setEditingMaster({...editingMaster, director: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="Director name"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Studio</label>
+            <input
+              type="text"
+              value={editingMaster.studio}
+              onChange={(e) => setEditingMaster({...editingMaster, studio: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="Production studio"
+            />
+          </div>
+
+          <div className="flex space-x-3 pt-4">
+            <button
+              onClick={() => setEditingMaster(null)}
+              className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={updateMasterRelease}
               className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
             >
               Save Changes
