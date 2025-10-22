@@ -24,7 +24,8 @@ export default function VHSCollectionTracker() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitType, setSubmitType] = useState('variant');
   const [lightboxImage, setLightboxImage] = useState(null);
-
+  const [editingVariant, setEditingVariant] = useState(null);
+  
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
     year: '',
@@ -368,7 +369,55 @@ export default function VHSCollectionTracker() {
     alert('Error: ' + error.message + ' - Check if you ran all the SQL policies');
   }
 };
-
+const deleteVariant = async (variantId) => {
+  if (!window.confirm('Are you sure you want to delete this variant permanently?')) {
+    return;
+  }
+  
+  try {
+    // Delete related data first
+    await supabase.from('variant_images').delete().eq('variant_id', variantId);
+    await supabase.from('submission_votes').delete().eq('variant_id', variantId);
+    await supabase.from('user_collections').delete().eq('variant_id', variantId);
+    await supabase.from('user_wishlists').delete().eq('variant_id', variantId);
+    
+    // Delete the variant
+    const { error } = await supabase
+      .from('variants')
+      .delete()
+      .eq('id', variantId);
+    
+    if (error) throw error;
+    
+    alert('Variant deleted!');
+    await loadMasterReleases();
+  } catch (error) {
+    alert('Error deleting variant: ' + error.message);
+  }
+};
+const updateVariant = async () => {
+  try {
+    const { error } = await supabase
+      .from('variants')
+      .update({
+        format: editingVariant.format,
+        region: editingVariant.region,
+        release_year: editingVariant.release_year,
+        packaging: editingVariant.packaging,
+        notes: editingVariant.notes,
+        barcode: editingVariant.barcode
+      })
+      .eq('id', editingVariant.id);
+    
+    if (error) throw error;
+    
+    alert('Variant updated!');
+    setEditingVariant(null);
+    await loadMasterReleases();
+  } catch (error) {
+    alert('Error updating variant: ' + error.message);
+  }
+};
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     const currentCount = newSubmission.imageFiles.length;
@@ -795,33 +844,54 @@ export default function VHSCollectionTracker() {
                             )}
                           </div>
                           <div className="ml-4 flex flex-col space-y-2">
-                            <button
-                              onClick={() => {
-                                if (inColl) {
-                                  removeFromCollection(variant.id);
-                                } else {
-                                  addToCollection(selectedMaster.id, variant.id);
-                                }
-                              }}
-                              className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-2 ${
-                                inColl
-                                  ? 'bg-red-500 text-white hover:bg-red-600'
-                                  : 'bg-purple-600 text-white hover:bg-purple-700'
-                              }`}
-                            >
-                              {inColl ? <><X className="w-4 h-4" /><span>Remove</span></> : <><Plus className="w-4 h-4" /><span>Add</span></>}
-                            </button>
-                            <button
-                              onClick={() => toggleWishlist(selectedMaster.id, variant.id)}
-                              className={`px-4 py-2 rounded-lg font-medium transition flex items-center justify-center ${
-                                inWish
-                                  ? 'bg-pink-500 text-white hover:bg-pink-600'
-                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                              }`}
-                            >
-                              <Heart className={`w-4 h-4 ${inWish ? 'fill-current' : ''}`} />
-                            </button>
-                          </div>
+  <button
+    onClick={() => {
+      if (inColl) {
+        removeFromCollection(variant.id);
+      } else {
+        addToCollection(selectedMaster.id, variant.id);
+      }
+    }}
+    className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-2 ${
+      inColl
+        ? 'bg-red-500 text-white hover:bg-red-600'
+        : 'bg-purple-600 text-white hover:bg-purple-700'
+    }`}
+  >
+    {inColl ? <><X className="w-4 h-4" /><span>Remove</span></> : <><Plus className="w-4 h-4" /><span>Add</span></>}
+  </button>
+  <button
+    onClick={() => toggleWishlist(selectedMaster.id, variant.id)}
+    className={`px-4 py-2 rounded-lg font-medium transition flex items-center justify-center ${
+      inWish
+        ? 'bg-pink-500 text-white hover:bg-pink-600'
+        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+    }`}
+  >
+    <Heart className={`w-4 h-4 ${inWish ? 'fill-current' : ''}`} />
+  </button>
+  
+  {isAdmin && (
+  <>
+    <button
+      onClick={() => setEditingVariant(variant)}
+      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center"
+      title="Edit Variant"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+    </button>
+    <button
+      onClick={() => deleteVariant(variant.id)}
+      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center justify-center"
+      title="Delete Variant"
+    >
+      <X className="w-4 h-4" />
+    </button>
+  </>
+)}
+</div>
                         </div>
                       </div>
                     );
@@ -1344,6 +1414,119 @@ export default function VHSCollectionTracker() {
           </div>
         </div>
       )}
+	  {editingVariant && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-800">Edit Variant</h2>
+          <button
+            onClick={() => setEditingVariant(null)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
+              <select
+                value={editingVariant.format}
+                onChange={(e) => setEditingVariant({...editingVariant, format: e.target.value})}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option>VHS</option>
+                <option>Betamax</option>
+                <option>Video CD</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Region</label>
+              <select
+                value={editingVariant.region}
+                onChange={(e) => setEditingVariant({...editingVariant, region: e.target.value})}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">Select region...</option>
+                {regionOptions.map(region => (
+                  <option key={region} value={region}>{region}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Release Year</label>
+              <input
+                type="text"
+                value={editingVariant.release_year}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || /^\d{1,4}$/.test(value)) {
+                    setEditingVariant({...editingVariant, release_year: value});
+                  }
+                }}
+                maxLength="4"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="1999"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Packaging</label>
+              <select
+                value={editingVariant.packaging}
+                onChange={(e) => setEditingVariant({...editingVariant, packaging: e.target.value})}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">Select packaging...</option>
+                {packagingOptions.map(pkg => (
+                  <option key={pkg} value={pkg}>{pkg}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Barcode</label>
+            <input
+              type="text"
+              value={editingVariant.barcode}
+              onChange={(e) => setEditingVariant({...editingVariant, barcode: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="Enter barcode"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+            <textarea
+              value={editingVariant.notes || ''}
+              onChange={(e) => setEditingVariant({...editingVariant, notes: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              rows="3"
+              placeholder="Optional notes"
+            />
+          </div>
+
+          <div className="flex space-x-3 pt-4">
+            <button
+              onClick={() => setEditingVariant(null)}
+              className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={updateVariant}
+              className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     {lightboxImage && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 z-50"
