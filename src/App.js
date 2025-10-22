@@ -14,6 +14,7 @@ export default function VHSCollectionTracker() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [masterReleases, setMasterReleases] = useState([]);
+  const [topReleases, setTopReleases] = useState([]);
   const [collection, setCollection] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [ratings, setRatings] = useState([]);
@@ -106,6 +107,7 @@ export default function VHSCollectionTracker() {
   const loadAllData = async () => {
     await Promise.all([
       loadMasterReleases(),
+      loadTopReleases(),
       loadUserCollection(),
       loadUserWishlist(),
       loadUserRatings(),
@@ -121,6 +123,49 @@ export default function VHSCollectionTracker() {
 
     if (!error && data) {
       setMasterReleases(data);
+    }
+  };
+
+  const loadTopReleases = async () => {
+    // Get collection counts by master_id
+    const { data: collectionCounts, error: countError } = await supabase
+      .from('user_collections')
+      .select('master_id');
+
+    if (countError || !collectionCounts) {
+      setTopReleases([]);
+      return;
+    }
+
+    // Count occurrences of each master_id
+    const counts = {};
+    collectionCounts.forEach(item => {
+      counts[item.master_id] = (counts[item.master_id] || 0) + 1;
+    });
+
+    // Sort by count and get top 5 master_ids
+    const topMasterIds = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([masterId]) => parseInt(masterId));
+
+    if (topMasterIds.length === 0) {
+      setTopReleases([]);
+      return;
+    }
+
+    // Fetch the actual master releases with their variants
+    const { data: releases, error: releasesError } = await supabase
+      .from('master_releases')
+      .select('*, variants(*, variant_images(*))')
+      .in('id', topMasterIds);
+
+    if (!releasesError && releases) {
+      // Sort releases by the counts we calculated
+      const sortedReleases = releases.sort((a, b) => {
+        return (counts[b.id] || 0) - (counts[a.id] || 0);
+      });
+      setTopReleases(sortedReleases);
     }
   };
 
@@ -929,7 +974,7 @@ export default function VHSCollectionTracker() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-2 md:space-x-8 overflow-x-auto">
             {(isAdmin
-              ? ['browse', 'collection', 'wishlist', 'marketplace', 'pending']
+              ? ['search', 'browse', 'collection', 'wishlist', 'marketplace', 'pending']
               : ['search', 'collection', 'wishlist', 'pending']
             ).map(tab => (
               <button
@@ -953,7 +998,7 @@ export default function VHSCollectionTracker() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {(view === 'browse' || view === 'search') && (
+        {view === 'search' && (
           <>
             <div className="flex flex-col md:flex-row gap-4 mb-6">
               <div className="relative flex-1">
@@ -966,15 +1011,6 @@ export default function VHSCollectionTracker() {
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
-              {isAdmin && (
-                <button
-                  onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
-                  className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  <span>Add New Title</span>
-                </button>
-              )}
             </div>
 
             {selectedVariant ? (
@@ -1107,8 +1143,12 @@ export default function VHSCollectionTracker() {
                 </div>
               </div>
             ) : !selectedMaster ? (
-              <div className="grid gap-4">
-                {filteredMasters.map(master => (
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                  {searchTerm ? 'Search Results' : 'Top Variants in Collections'}
+                </h2>
+                <div className="grid gap-4">
+                  {(searchTerm ? filteredMasters : topReleases).map(master => (
                   <div
                     key={master.id}
                     className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer"
@@ -1142,13 +1182,18 @@ export default function VHSCollectionTracker() {
                     </div>
                   </div>
                 ))}
-                {filteredMasters.length === 0 && (
-                  <div className="bg-white rounded-lg shadow p-12 text-center">
-                    <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg">No titles found</p>
-                    <p className="text-gray-500 mt-2">Try a different search or add a new title</p>
-                  </div>
-                )}
+                  {(searchTerm ? filteredMasters : topReleases).length === 0 && (
+                    <div className="bg-white rounded-lg shadow p-12 text-center">
+                      <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 text-lg">
+                        {searchTerm ? 'No titles found' : 'No popular titles yet'}
+                      </p>
+                      <p className="text-gray-500 mt-2">
+                        {searchTerm ? 'Try a different search' : 'Be the first to add titles to your collection!'}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div>
@@ -1397,6 +1442,439 @@ export default function VHSCollectionTracker() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {view === 'browse' && (
+          <>
+            <div className="flex flex-col md:flex-row gap-4 mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search titles or directors..."
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <button
+                onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add New Title</span>
+              </button>
+            </div>
+
+            {selectedVariant ? (
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <button
+                    onClick={() => setSelectedVariant(null)}
+                    className="text-purple-600 hover:text-purple-700 font-medium"
+                  >
+                    ← Back to variants
+                  </button>
+                </div>
+
+                {/* Variant Detail Card */}
+                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                  <div className="flex gap-6">
+                    {/* Variant Images Gallery */}
+                    {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
+                      <div className="flex-shrink-0">
+                        <img
+                          src={selectedVariant.variant_images[0].image_url}
+                          alt="Variant cover"
+                          className="w-48 h-72 object-cover rounded shadow-lg cursor-pointer hover:shadow-xl transition"
+                          onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), 0)}
+                        />
+                        {selectedVariant.variant_images.length > 1 && (
+                          <div className="grid grid-cols-3 gap-2 mt-3">
+                            {selectedVariant.variant_images.slice(1, 4).map((img, idx) => (
+                              <img
+                                key={idx}
+                                src={img.image_url}
+                                alt={`Image ${idx + 2}`}
+                                className="w-full h-20 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), idx + 1)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-48 h-72 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-lg flex items-center justify-center flex-shrink-0">
+                        <Film className="w-24 h-24 text-purple-400" />
+                      </div>
+                    )}
+
+                    {/* Variant Details */}
+                    <div className="flex-1">
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                        {selectedMaster?.title || 'Unknown Title'}
+                      </h2>
+                      <p className="text-gray-600 mb-4">
+                        {selectedMaster?.director} • {selectedMaster?.year} • {selectedMaster?.genre}
+                      </p>
+
+                      <div className="border-t pt-4 mb-4">
+                        <h3 className="text-lg font-bold text-gray-700 mb-3">Variant Details</h3>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Format</p>
+                            <p className="text-gray-600">{selectedVariant.format}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Region</p>
+                            <p className="text-gray-600">{selectedVariant.region}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Release Year</p>
+                            <p className="text-gray-600">{selectedVariant.release_year}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Packaging</p>
+                            <p className="text-gray-600">{selectedVariant.packaging}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Barcode</p>
+                            <p className="text-gray-600">{selectedVariant.barcode || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Status</p>
+                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm inline-flex items-center space-x-1">
+                              <Check className="w-3 h-3" />
+                              <span>Verified</span>
+                            </span>
+                          </div>
+                          {selectedVariant.notes && (
+                            <div className="md:col-span-2">
+                              <p className="text-sm font-semibold text-gray-700">Notes</p>
+                              <p className="text-gray-600 italic">{selectedVariant.notes}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 border-t pt-4">
+                        <button
+                          onClick={() => {
+                            if (isInCollection(selectedVariant.id)) {
+                              removeFromCollection(selectedVariant.id);
+                            } else {
+                              addToCollection(selectedMaster?.id, selectedVariant.id);
+                            }
+                          }}
+                          className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
+                            isInCollection(selectedVariant.id)
+                              ? 'bg-red-500 text-white hover:bg-red-600'
+                              : 'bg-purple-600 text-white hover:bg-purple-700'
+                          }`}
+                        >
+                          {isInCollection(selectedVariant.id) ? (
+                            <><X className="w-5 h-5" /><span>Remove from Collection</span></>
+                          ) : (
+                            <><Plus className="w-5 h-5" /><span>Add to Collection</span></>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => toggleWishlist(selectedMaster?.id, selectedVariant.id)}
+                          className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
+                            isInWishlist(selectedVariant.id)
+                              ? 'bg-pink-500 text-white hover:bg-pink-600'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          <Heart className={`w-5 h-5 ${isInWishlist(selectedVariant.id) ? 'fill-current' : ''}`} />
+                          <span>{isInWishlist(selectedVariant.id) ? 'In Wishlist' : 'Add to Wishlist'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : !selectedMaster ? (
+              <div className="grid gap-4">
+                {filteredMasters.map(master => (
+                  <div
+                    key={master.id}
+                    className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer"
+                    onClick={() => setSelectedMaster(master)}
+                  >
+                    <div className="flex gap-4 items-start">
+                      {master.poster_url ? (
+                        <img
+                          src={master.poster_url}
+                          alt={`${master.title} poster`}
+                          className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-24 h-36 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                          <Film className="w-12 h-12 text-purple-400" />
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <h2 className="text-xl font-bold text-gray-800 mb-1">{master.title}</h2>
+                        <p className="text-gray-600">{master.director} • {master.year} • {master.genre}</p>
+                        <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
+                        <div className="flex items-center space-x-4 mt-3">
+                          <div className="flex items-center space-x-1">
+                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                            <span className="font-medium">{master.avg_rating || 0}</span>
+                            <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
+                          </div>
+                          <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {filteredMasters.length === 0 && (
+                  <div className="bg-white rounded-lg shadow p-12 text-center">
+                    <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 text-lg">No titles found</p>
+                    <p className="text-gray-500 mt-2">Try a different search or add a new title</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <button
+                    onClick={() => setSelectedMaster(null)}
+                    className="text-purple-600 hover:text-purple-700 font-medium"
+                  >
+                    ← Back to list
+                  </button>
+                  {isAdmin && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingMaster(selectedMaster);
+                          setNewSubmission({
+                            masterTitle: selectedMaster.title,
+                            year: selectedMaster.year,
+                            director: selectedMaster.director,
+                            studio: selectedMaster.studio,
+                            genre: selectedMaster.genre,
+                            variantFormat: 'VHS',
+                            variantRegion: '',
+                            variantRelease: '',
+                            variantPackaging: '',
+                            variantNotes: '',
+                            variantBarcode: '',
+                            imageCover: null,
+                            imageBack: null,
+                            imageSpine: null,
+                            imageTapeLabel: null
+                          });
+                          setShowSubmitModal(true);
+                          setSubmitType('master');
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center space-x-2"
+                      >
+                        <Edit className="w-4 h-4" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() => deleteMasterRelease(selectedMaster.id)}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center space-x-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                  <div className="flex gap-6 mb-4">
+                    {selectedMaster.poster_url ? (
+                      <img
+                        src={selectedMaster.poster_url}
+                        alt={`${selectedMaster.title} poster`}
+                        className="w-48 h-72 object-cover rounded shadow-lg flex-shrink-0 cursor-pointer hover:shadow-xl transition"
+                        onClick={() => openImageGallery([selectedMaster.poster_url], 0)}
+                      />
+                    ) : (
+                      <div className="w-48 h-72 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-lg flex items-center justify-center flex-shrink-0">
+                        <Film className="w-24 h-24 text-purple-400" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <h1 className="text-3xl font-bold text-gray-800 mb-2">{selectedMaster.title}</h1>
+                      <p className="text-gray-600 mb-4">{selectedMaster.director} • {selectedMaster.year} • {selectedMaster.genre}</p>
+                      <p className="text-gray-700 mb-2"><span className="font-semibold">Studio:</span> {selectedMaster.studio}</p>
+                      <div className="flex items-center space-x-1 mb-4">
+                        <Star className="w-5 h-5 text-yellow-500 fill-current" />
+                        <span className="font-medium text-lg">{selectedMaster.avg_rating || 0}</span>
+                        <span className="text-gray-500">({selectedMaster.total_ratings || 0} ratings)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold text-gray-800">Variants</h2>
+                    <button
+                      onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
+                      className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition flex items-center space-x-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Variant</span>
+                    </button>
+                  </div>
+
+                  <div className="grid gap-4">
+                    {selectedMaster.variants?.filter(v => v.approved).map(variant => {
+                      const inColl = isInCollection(variant.id);
+                      const inWish = isInWishlist(variant.id);
+                      return (
+                        <div key={variant.id} className="bg-white rounded-lg shadow p-6">
+                          <div className="flex gap-4 items-start">
+                            {/* Variant Images - Left Side */}
+                            {variant.variant_images && variant.variant_images.length > 0 ? (
+                              <div className="flex-shrink-0">
+                                <img
+                                  src={variant.variant_images[0].image_url}
+                                  alt="Variant cover"
+                                  className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
+                                  onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), 0)}
+                                />
+                                {variant.variant_images.length > 1 && (
+                                  <div className="flex mt-2 space-x-1">
+                                    {variant.variant_images.slice(1, 4).map((img, idx) => (
+                                      <img
+                                        key={idx}
+                                        src={img.image_url}
+                                        alt={`Variant ${idx + 2}`}
+                                        className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                        onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), idx + 1)}
+                                      />
+                                    ))}
+                                    {variant.variant_images.length > 4 && (
+                                      <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                        +{variant.variant_images.length - 4}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                                <Film className="w-16 h-16 text-purple-400" />
+                              </div>
+                            )}
+
+                            {/* Variant Info - Center */}
+                            <div
+                              className="flex-1 cursor-pointer hover:bg-gray-50 rounded p-2 -m-2 transition"
+                              onClick={() => setSelectedVariant(variant)}
+                            >
+                              <div className="flex items-center space-x-2 mb-2">
+                                <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                                  {variant.format}
+                                </span>
+                                <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                                  {variant.region}
+                                </span>
+                                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm flex items-center space-x-1">
+                                  <Check className="w-3 h-3" />
+                                  <span>Verified</span>
+                                </span>
+                              </div>
+                              <p className="text-gray-700 mb-1">
+                                <span className="font-semibold">Release:</span> {variant.release_year}
+                              </p>
+                              <p className="text-gray-700 mb-1">
+                                <span className="font-semibold">Packaging:</span> {variant.packaging}
+                              </p>
+                              <p className="text-gray-700 mb-1">
+                                <span className="font-semibold">Barcode:</span> {variant.barcode}
+                              </p>
+                              {variant.notes && (
+                                <p className="text-gray-600 text-sm mt-2 italic">{variant.notes}</p>
+                              )}
+                              <p className="text-xs text-gray-500 mt-2">
+                                {variant.votes_up || 0} 👍 {variant.votes_down || 0} 👎
+                              </p>
+                            </div>
+
+                            {/* Action Buttons - Right Side */}
+                            <div className="flex flex-col space-y-2 flex-shrink-0">
+                              <button
+                                onClick={() => {
+                                  if (inColl) {
+                                    removeFromCollection(variant.id);
+                                  } else {
+                                    addToCollection(selectedMaster.id, variant.id);
+                                  }
+                                }}
+                                className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-2 ${
+                                  inColl
+                                    ? 'bg-red-500 text-white hover:bg-red-600'
+                                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                                }`}
+                              >
+                                {inColl ? <><X className="w-4 h-4" /><span>Remove</span></> : <><Plus className="w-4 h-4" /><span>Add</span></>}
+                              </button>
+                              <button
+                                onClick={() => toggleWishlist(selectedMaster.id, variant.id)}
+                                className={`px-4 py-2 rounded-lg font-medium transition flex items-center justify-center ${
+                                  inWish
+                                    ? 'bg-pink-500 text-white hover:bg-pink-600'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                              >
+                                <Heart className={`w-4 h-4 ${inWish ? 'fill-current' : ''}`} />
+                              </button>
+                              {isAdmin && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setEditingVariant(variant);
+                                      setNewSubmission({
+                                        ...newSubmission,
+                                        variantFormat: variant.format,
+                                        variantRegion: variant.region,
+                                        variantRelease: variant.release_year,
+                                        variantPackaging: variant.packaging,
+                                        variantNotes: variant.notes || '',
+                                        variantBarcode: variant.barcode || '',
+                                        imageCover: null,
+                                        imageBack: null,
+                                        imageSpine: null,
+                                        imageTapeLabel: null
+                                      });
+                                      setShowSubmitModal(true);
+                                      setSubmitType('variant');
+                                    }}
+                                    className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"
+                                    title="Edit variant"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => deleteVariant(variant.id)}
+                                    className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
+                                    title="Delete variant"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
