@@ -500,6 +500,20 @@ export default function VHSCollectionTracker() {
       .from('variants')
       .update({ votes_up: upVotes, votes_down: downVotes })
       .eq('id', variantId);
+
+    // Auto-approve if 10 or more upvotes
+    if (upVotes >= 10) {
+      // Check if variant is still pending (not already approved)
+      const { data: variant } = await supabase
+        .from('variants')
+        .select('approved')
+        .eq('id', variantId)
+        .single();
+
+      if (variant && !variant.approved) {
+        await approveSubmission(variantId);
+      }
+    }
   };
 
   const approveSubmission = async (variantId) => {
@@ -696,11 +710,37 @@ export default function VHSCollectionTracker() {
     for (const imageType of imageTypes) {
       const fileObj = newSubmission[imageType.key];
       if (!fileObj) continue; // Skip if no image uploaded for this type
+      if (fileObj.existing) continue; // Skip if this is an existing image (not replaced)
 
       const file = fileObj.file;
       const fileExt = file.name.split('.').pop();
       const fileName = `${variantId}-${imageType.label.toLowerCase().replace(' ', '-')}-${Date.now()}.${fileExt}`;
 
+      // If editing, delete old image with this order
+      if (editingVariant) {
+        const { data: oldImage } = await supabase
+          .from('variant_images')
+          .select('*')
+          .eq('variant_id', variantId)
+          .eq('image_order', imageType.order)
+          .maybeSingle();
+
+        if (oldImage) {
+          // Delete old image from storage
+          const oldFileName = oldImage.image_url.split('/').pop();
+          await supabase.storage
+            .from('variant-images')
+            .remove([oldFileName]);
+
+          // Delete old image record
+          await supabase
+            .from('variant_images')
+            .delete()
+            .eq('id', oldImage.id);
+        }
+      }
+
+      // Upload new image
       const { error } = await supabase.storage
         .from('variant-images')
         .upload(fileName, file);
@@ -727,6 +767,26 @@ export default function VHSCollectionTracker() {
         }
         if (!newSubmission.variantPackaging) {
           alert('Packaging is required! Please select a packaging type before submitting.');
+          return;
+        }
+      }
+
+      // Validate required images for new submissions (not edits)
+      if (!editingMaster && !editingVariant) {
+        if (!newSubmission.imageCover) {
+          alert('Cover image is required! Please upload a cover image.');
+          return;
+        }
+        if (!newSubmission.imageBack) {
+          alert('Back image is required! Please upload a back image.');
+          return;
+        }
+        if (!newSubmission.imageSpine) {
+          alert('Spine image is required! Please upload a spine image.');
+          return;
+        }
+        if (!newSubmission.imageTapeLabel) {
+          alert('Tape Label image is required! Please upload a tape label image.');
           return;
         }
       }
@@ -1006,10 +1066,67 @@ export default function VHSCollectionTracker() {
                 <input
                   type="text"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search titles or directors..."
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSearchTerm(value);
+                    handleTitleSearch(value);
+                  }}
+                  onFocus={() => {
+                    if (tmdbSearchResults.length > 0) {
+                      setShowTmdbDropdown(true);
+                    }
+                  }}
+                  placeholder="Search for movies on TMDB..."
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  autoComplete="off"
                 />
+                {showTmdbDropdown && tmdbSearchResults.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+                    {tmdbSearchResults.map((movie) => (
+                      <div
+                        key={movie.id}
+                        onClick={async () => {
+                          // Check if this movie exists in our database
+                          const { data: existing } = await supabase
+                            .from('master_releases')
+                            .select('*, variants(*, variant_images(*))')
+                            .eq('title', movie.title)
+                            .eq('year', movie.release_date ? parseInt(movie.release_date.substring(0, 4)) : 0)
+                            .maybeSingle();
+
+                          if (existing) {
+                            setSelectedMaster(existing);
+                            setSearchTerm('');
+                            setShowTmdbDropdown(false);
+                            setTmdbSearchResults([]);
+                          } else {
+                            alert(`"${movie.title}" is not in our database yet. Click "Add New Title" to submit it!`);
+                            setShowTmdbDropdown(false);
+                          }
+                        }}
+                        className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        {movie.poster_path ? (
+                          <img
+                            src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
+                            alt={movie.title}
+                            className="w-12 h-18 object-cover rounded mr-3 flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-12 h-18 bg-gray-200 rounded mr-3 flex-shrink-0 flex items-center justify-center">
+                            <Film className="w-6 h-6 text-gray-400" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-medium text-gray-800">{movie.title}</div>
+                          <div className="text-sm text-gray-500">
+                            {movie.release_date ? movie.release_date.substring(0, 4) : 'Unknown'}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
@@ -1414,6 +1531,14 @@ export default function VHSCollectionTracker() {
                                 <button
                                   onClick={() => {
                                     setEditingVariant(variant);
+
+                                    // Pre-populate existing images based on image_order
+                                    const images = variant.variant_images || [];
+                                    const coverImg = images.find(img => img.image_order === 0);
+                                    const backImg = images.find(img => img.image_order === 1);
+                                    const spineImg = images.find(img => img.image_order === 2);
+                                    const tapeImg = images.find(img => img.image_order === 3);
+
                                     setNewSubmission({
                                       ...newSubmission,
                                       variantFormat: variant.format,
@@ -1422,10 +1547,10 @@ export default function VHSCollectionTracker() {
                                       variantPackaging: variant.packaging,
                                       variantNotes: variant.notes || '',
                                       variantBarcode: variant.barcode || '',
-                                      imageCover: null,
-                                      imageBack: null,
-                                      imageSpine: null,
-                                      imageTapeLabel: null
+                                      imageCover: coverImg ? { preview: coverImg.image_url, existing: true } : null,
+                                      imageBack: backImg ? { preview: backImg.image_url, existing: true } : null,
+                                      imageSpine: spineImg ? { preview: spineImg.image_url, existing: true } : null,
+                                      imageTapeLabel: tapeImg ? { preview: tapeImg.image_url, existing: true } : null
                                     });
                                     setShowSubmitModal(true);
                                     setSubmitType('variant');
@@ -1846,6 +1971,14 @@ export default function VHSCollectionTracker() {
                                   <button
                                     onClick={() => {
                                       setEditingVariant(variant);
+
+                                      // Pre-populate existing images based on image_order
+                                      const images = variant.variant_images || [];
+                                      const coverImg = images.find(img => img.image_order === 0);
+                                      const backImg = images.find(img => img.image_order === 1);
+                                      const spineImg = images.find(img => img.image_order === 2);
+                                      const tapeImg = images.find(img => img.image_order === 3);
+
                                       setNewSubmission({
                                         ...newSubmission,
                                         variantFormat: variant.format,
@@ -1854,10 +1987,10 @@ export default function VHSCollectionTracker() {
                                         variantPackaging: variant.packaging,
                                         variantNotes: variant.notes || '',
                                         variantBarcode: variant.barcode || '',
-                                        imageCover: null,
-                                        imageBack: null,
-                                        imageSpine: null,
-                                        imageTapeLabel: null
+                                        imageCover: coverImg ? { preview: coverImg.image_url, existing: true } : null,
+                                        imageBack: backImg ? { preview: backImg.image_url, existing: true } : null,
+                                        imageSpine: spineImg ? { preview: spineImg.image_url, existing: true } : null,
+                                        imageTapeLabel: tapeImg ? { preview: tapeImg.image_url, existing: true } : null
                                       });
                                       setShowSubmitModal(true);
                                       setSubmitType('variant');
@@ -2459,19 +2592,27 @@ export default function VHSCollectionTracker() {
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Cover</label>
                           {newSubmission.imageCover ? (
-                            <div className="relative">
+                            <div className="relative group">
                               <img
                                 src={newSubmission.imageCover.preview}
                                 alt="Cover preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
                               />
-                              <button
-                                type="button"
-                                onClick={() => removeImage('imageCover')}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'imageCover')}
+                                className="hidden"
+                                id="image-cover-replace"
+                              />
+                              <label
+                                htmlFor="image-cover-replace"
+                                className="absolute inset-0 bg-black bg-opacity-50 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"
                               >
-                                <X className="w-3 h-3" />
-                              </button>
+                                <span className="text-white font-medium text-sm">
+                                  {editingVariant && newSubmission.imageCover.existing ? 'Replace' : 'Change'}
+                                </span>
+                              </label>
                             </div>
                           ) : (
                             <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 transition">
@@ -2494,19 +2635,27 @@ export default function VHSCollectionTracker() {
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Back</label>
                           {newSubmission.imageBack ? (
-                            <div className="relative">
+                            <div className="relative group">
                               <img
                                 src={newSubmission.imageBack.preview}
                                 alt="Back preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
                               />
-                              <button
-                                type="button"
-                                onClick={() => removeImage('imageBack')}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'imageBack')}
+                                className="hidden"
+                                id="image-back-replace"
+                              />
+                              <label
+                                htmlFor="image-back-replace"
+                                className="absolute inset-0 bg-black bg-opacity-50 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"
                               >
-                                <X className="w-3 h-3" />
-                              </button>
+                                <span className="text-white font-medium text-sm">
+                                  {editingVariant && newSubmission.imageBack.existing ? 'Replace' : 'Change'}
+                                </span>
+                              </label>
                             </div>
                           ) : (
                             <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 transition">
@@ -2529,19 +2678,27 @@ export default function VHSCollectionTracker() {
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Spine</label>
                           {newSubmission.imageSpine ? (
-                            <div className="relative">
+                            <div className="relative group">
                               <img
                                 src={newSubmission.imageSpine.preview}
                                 alt="Spine preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
                               />
-                              <button
-                                type="button"
-                                onClick={() => removeImage('imageSpine')}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'imageSpine')}
+                                className="hidden"
+                                id="image-spine-replace"
+                              />
+                              <label
+                                htmlFor="image-spine-replace"
+                                className="absolute inset-0 bg-black bg-opacity-50 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"
                               >
-                                <X className="w-3 h-3" />
-                              </button>
+                                <span className="text-white font-medium text-sm">
+                                  {editingVariant && newSubmission.imageSpine.existing ? 'Replace' : 'Change'}
+                                </span>
+                              </label>
                             </div>
                           ) : (
                             <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 transition">
@@ -2564,19 +2721,27 @@ export default function VHSCollectionTracker() {
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Tape Label</label>
                           {newSubmission.imageTapeLabel ? (
-                            <div className="relative">
+                            <div className="relative group">
                               <img
                                 src={newSubmission.imageTapeLabel.preview}
                                 alt="Tape Label preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
                               />
-                              <button
-                                type="button"
-                                onClick={() => removeImage('imageTapeLabel')}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'imageTapeLabel')}
+                                className="hidden"
+                                id="image-tape-label-replace"
+                              />
+                              <label
+                                htmlFor="image-tape-label-replace"
+                                className="absolute inset-0 bg-black bg-opacity-50 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"
                               >
-                                <X className="w-3 h-3" />
-                              </button>
+                                <span className="text-white font-medium text-sm">
+                                  {editingVariant && newSubmission.imageTapeLabel.existing ? 'Replace' : 'Change'}
+                                </span>
+                              </label>
                             </div>
                           ) : (
                             <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 transition">
