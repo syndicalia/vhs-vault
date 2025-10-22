@@ -227,15 +227,54 @@ export default function VHSCollectionTracker() {
     setTmdbSearchTimeout(timeout);
   };
 
-  const selectTmdbMovie = (movie) => {
-    setNewSubmission({
-      ...newSubmission,
-      masterTitle: movie.title,
-      year: movie.release_date ? movie.release_date.substring(0, 4) : '',
-      genre: '', // We could map genre_ids to names if needed
-    });
-    setShowTmdbDropdown(false);
-    setTmdbSearchResults([]);
+  const selectTmdbMovie = async (movie) => {
+    // Fetch full movie details including director, studio, and genres
+    try {
+      const response = await fetch(
+        `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+      );
+      const details = await response.json();
+
+      // Extract director from crew
+      let director = '';
+      if (details.credits && details.credits.crew) {
+        const directorObj = details.credits.crew.find(person => person.job === 'Director');
+        director = directorObj ? directorObj.name : '';
+      }
+
+      // Extract production studio (first production company)
+      let studio = '';
+      if (details.production_companies && details.production_companies.length > 0) {
+        studio = details.production_companies[0].name;
+      }
+
+      // Extract genres (comma-separated)
+      let genres = '';
+      if (details.genres && details.genres.length > 0) {
+        genres = details.genres.map(g => g.name).join(', ');
+      }
+
+      setNewSubmission({
+        ...newSubmission,
+        masterTitle: movie.title,
+        year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+        director: director,
+        studio: studio,
+        genre: genres
+      });
+      setShowTmdbDropdown(false);
+      setTmdbSearchResults([]);
+    } catch (error) {
+      console.error('Error fetching TMDB details:', error);
+      // Fallback to basic info if detailed fetch fails
+      setNewSubmission({
+        ...newSubmission,
+        masterTitle: movie.title,
+        year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+      });
+      setShowTmdbDropdown(false);
+      setTmdbSearchResults([]);
+    }
   };
 
   const handleAuth = async (e) => {
@@ -600,6 +639,18 @@ export default function VHSCollectionTracker() {
 
   const handleSubmitEntry = async () => {
     try {
+      // Validate required fields for variants
+      if (!editingMaster) {
+        if (!newSubmission.variantRegion) {
+          alert('Region is required! Please select a region before submitting.');
+          return;
+        }
+        if (!newSubmission.variantPackaging) {
+          alert('Packaging is required! Please select a packaging type before submitting.');
+          return;
+        }
+      }
+
       if (submitType === 'master') {
         if (editingMaster) {
           // Edit existing master
