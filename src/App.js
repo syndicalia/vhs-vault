@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -23,10 +23,12 @@ export default function VHSCollectionTracker() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMaster, setSelectedMaster] = useState(null);
+  const [selectedVariant, setSelectedVariant] = useState(null);
   const [view, setView] = useState('browse');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitType, setSubmitType] = useState('variant');
-  const [imageModalUrl, setImageModalUrl] = useState(null);
+  const [imageGallery, setImageGallery] = useState([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [editingVariant, setEditingVariant] = useState(null);
   const [editingMaster, setEditingMaster] = useState(null);
   const [tmdbSearchResults, setTmdbSearchResults] = useState([]);
@@ -611,6 +613,24 @@ export default function VHSCollectionTracker() {
     }
   };
 
+  const openImageGallery = (images, startIndex = 0) => {
+    setImageGallery(images);
+    setCurrentImageIndex(startIndex);
+  };
+
+  const closeImageGallery = () => {
+    setImageGallery([]);
+    setCurrentImageIndex(0);
+  };
+
+  const nextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % imageGallery.length);
+  };
+
+  const prevImage = () => {
+    setCurrentImageIndex((prev) => (prev - 1 + imageGallery.length) % imageGallery.length);
+  };
+
   const uploadImages = async (variantId) => {
     const imageTypes = [
       { key: 'imageCover', order: 0, label: 'Cover' },
@@ -939,7 +959,136 @@ export default function VHSCollectionTracker() {
               </button>
             </div>
 
-            {!selectedMaster ? (
+            {selectedVariant ? (
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <button
+                    onClick={() => setSelectedVariant(null)}
+                    className="text-purple-600 hover:text-purple-700 font-medium"
+                  >
+                    ← Back to variants
+                  </button>
+                </div>
+
+                {/* Variant Detail Card */}
+                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                  <div className="flex gap-6">
+                    {/* Variant Images Gallery */}
+                    {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
+                      <div className="flex-shrink-0">
+                        <img
+                          src={selectedVariant.variant_images[0].image_url}
+                          alt="Variant cover"
+                          className="w-48 h-72 object-cover rounded shadow-lg cursor-pointer hover:shadow-xl transition"
+                          onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), 0)}
+                        />
+                        {selectedVariant.variant_images.length > 1 && (
+                          <div className="grid grid-cols-3 gap-2 mt-3">
+                            {selectedVariant.variant_images.slice(1, 4).map((img, idx) => (
+                              <img
+                                key={idx}
+                                src={img.image_url}
+                                alt={`Image ${idx + 2}`}
+                                className="w-full h-20 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), idx + 1)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-48 h-72 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-lg flex items-center justify-center flex-shrink-0">
+                        <Film className="w-24 h-24 text-purple-400" />
+                      </div>
+                    )}
+
+                    {/* Variant Details */}
+                    <div className="flex-1">
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                        {selectedMaster?.title || 'Unknown Title'}
+                      </h2>
+                      <p className="text-gray-600 mb-4">
+                        {selectedMaster?.director} • {selectedMaster?.year} • {selectedMaster?.genre}
+                      </p>
+
+                      <div className="border-t pt-4 mb-4">
+                        <h3 className="text-lg font-bold text-gray-700 mb-3">Variant Details</h3>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Format</p>
+                            <p className="text-gray-600">{selectedVariant.format}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Region</p>
+                            <p className="text-gray-600">{selectedVariant.region}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Release Year</p>
+                            <p className="text-gray-600">{selectedVariant.release_year}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Packaging</p>
+                            <p className="text-gray-600">{selectedVariant.packaging}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Barcode</p>
+                            <p className="text-gray-600">{selectedVariant.barcode || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Status</p>
+                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm inline-flex items-center space-x-1">
+                              <Check className="w-3 h-3" />
+                              <span>Verified</span>
+                            </span>
+                          </div>
+                          {selectedVariant.notes && (
+                            <div className="md:col-span-2">
+                              <p className="text-sm font-semibold text-gray-700">Notes</p>
+                              <p className="text-gray-600 italic">{selectedVariant.notes}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 border-t pt-4">
+                        <button
+                          onClick={() => {
+                            if (isInCollection(selectedVariant.id)) {
+                              removeFromCollection(selectedVariant.id);
+                            } else {
+                              addToCollection(selectedMaster?.id, selectedVariant.id);
+                            }
+                          }}
+                          className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
+                            isInCollection(selectedVariant.id)
+                              ? 'bg-red-500 text-white hover:bg-red-600'
+                              : 'bg-purple-600 text-white hover:bg-purple-700'
+                          }`}
+                        >
+                          {isInCollection(selectedVariant.id) ? (
+                            <><X className="w-5 h-5" /><span>Remove from Collection</span></>
+                          ) : (
+                            <><Plus className="w-5 h-5" /><span>Add to Collection</span></>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => toggleWishlist(selectedMaster?.id, selectedVariant.id)}
+                          className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
+                            isInWishlist(selectedVariant.id)
+                              ? 'bg-pink-500 text-white hover:bg-pink-600'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          <Heart className={`w-5 h-5 ${isInWishlist(selectedVariant.id) ? 'fill-current' : ''}`} />
+                          <span>{isInWishlist(selectedVariant.id) ? 'In Wishlist' : 'Add to Wishlist'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : !selectedMaster ? (
               <div className="grid gap-4">
                 {filteredMasters.map(master => (
                   <div
@@ -1030,7 +1179,7 @@ export default function VHSCollectionTracker() {
                         src={selectedMaster.poster_url}
                         alt={`${selectedMaster.title} poster`}
                         className="w-48 h-72 object-cover rounded shadow-lg flex-shrink-0 cursor-pointer hover:shadow-xl transition"
-                        onClick={() => setImageModalUrl(selectedMaster.poster_url)}
+                        onClick={() => openImageGallery([selectedMaster.poster_url], 0)}
                       />
                     ) : (
                       <div className="w-48 h-72 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-lg flex items-center justify-center flex-shrink-0">
@@ -1101,7 +1250,7 @@ export default function VHSCollectionTracker() {
                                 src={variant.variant_images[0].image_url}
                                 alt="Variant cover"
                                 className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
-                                onClick={() => setImageModalUrl(variant.variant_images[0].image_url)}
+                                onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), 0)}
                               />
                               {variant.variant_images.length > 1 && (
                                 <div className="flex mt-2 space-x-1">
@@ -1111,7 +1260,7 @@ export default function VHSCollectionTracker() {
                                       src={img.image_url}
                                       alt={`Variant ${idx + 2}`}
                                       className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                      onClick={() => setImageModalUrl(img.image_url)}
+                                      onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), idx + 1)}
                                     />
                                   ))}
                                   {variant.variant_images.length > 4 && (
@@ -1129,7 +1278,10 @@ export default function VHSCollectionTracker() {
                           )}
 
                           {/* Variant Info - Center */}
-                          <div className="flex-1">
+                          <div
+                            className="flex-1 cursor-pointer hover:bg-gray-50 rounded p-2 -m-2 transition"
+                            onClick={() => setSelectedVariant(variant)}
+                          >
                             <div className="flex items-center space-x-2 mb-2">
                               <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
                                 {variant.format}
@@ -1254,7 +1406,7 @@ export default function VHSCollectionTracker() {
                             src={item.variant.variant_images[0].image_url}
                             alt="Variant cover"
                             className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
-                            onClick={() => setImageModalUrl(item.variant.variant_images[0].image_url)}
+                            onClick={() => openImageGallery(item.variant.variant_images.map(img => img.image_url), 0)}
                           />
                           {item.variant.variant_images.length > 1 && (
                             <div className="flex mt-2 space-x-1">
@@ -1264,7 +1416,7 @@ export default function VHSCollectionTracker() {
                                   src={img.image_url}
                                   alt={`Variant ${imgIdx + 2}`}
                                   className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                  onClick={() => setImageModalUrl(img.image_url)}
+                                  onClick={() => openImageGallery(item.variant.variant_images.map(img => img.image_url), imgIdx + 1)}
                                 />
                               ))}
                               {item.variant.variant_images.length > 4 && (
@@ -1485,7 +1637,7 @@ export default function VHSCollectionTracker() {
                               src={submission.variant_images[0].image_url}
                               alt="Variant cover"
                               className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
-                              onClick={() => setImageModalUrl(submission.variant_images[0].image_url)}
+                              onClick={() => openImageGallery(submission.variant_images.map(img => img.image_url), 0)}
                             />
                             {submission.variant_images.length > 1 && (
                               <div className="flex mt-2 space-x-1">
@@ -1495,7 +1647,7 @@ export default function VHSCollectionTracker() {
                                     src={img.image_url}
                                     alt={`Variant ${idx + 2}`}
                                     className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                    onClick={() => setImageModalUrl(img.image_url)}
+                                    onClick={() => openImageGallery(submission.variant_images.map(img => img.image_url), idx + 1)}
                                   />
                                 ))}
                                 {submission.variant_images.length > 4 && (
@@ -1983,24 +2135,77 @@ export default function VHSCollectionTracker() {
         </div>
       )}
 
-      {imageModalUrl && (
+      {imageGallery.length > 0 && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50"
-          onClick={() => setImageModalUrl(null)}
+          className="fixed inset-0 bg-black bg-opacity-95 flex flex-col items-center justify-center p-4 z-50"
+          onClick={closeImageGallery}
         >
-          <div className="relative max-w-5xl max-h-[90vh]">
+          <div className="relative w-full max-w-6xl flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            {/* Close Button */}
             <button
-              onClick={() => setImageModalUrl(null)}
-              className="absolute -top-4 -right-4 bg-white text-gray-800 rounded-full p-2 hover:bg-gray-100 transition shadow-lg z-10"
+              onClick={closeImageGallery}
+              className="absolute -top-12 right-0 bg-white text-gray-800 rounded-full p-2 hover:bg-gray-100 transition shadow-lg z-10"
             >
               <X className="w-6 h-6" />
             </button>
-            <img
-              src={imageModalUrl}
-              alt="Enlarged preview"
-              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
+
+            {/* Main Image */}
+            <div className="relative flex items-center justify-center w-full">
+              {/* Previous Button */}
+              {imageGallery.length > 1 && (
+                <button
+                  onClick={prevImage}
+                  className="absolute left-4 bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-800 rounded-full p-3 transition shadow-lg z-10"
+                >
+                  <ChevronLeft className="w-8 h-8" />
+                </button>
+              )}
+
+              {/* Image */}
+              <img
+                src={imageGallery[currentImageIndex]}
+                alt={`Image ${currentImageIndex + 1}`}
+                className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl"
+              />
+
+              {/* Next Button */}
+              {imageGallery.length > 1 && (
+                <button
+                  onClick={nextImage}
+                  className="absolute right-4 bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-800 rounded-full p-3 transition shadow-lg z-10"
+                >
+                  <ChevronRight className="w-8 h-8" />
+                </button>
+              )}
+            </div>
+
+            {/* Thumbnail Strip */}
+            {imageGallery.length > 1 && (
+              <div className="mt-6 flex gap-2 overflow-x-auto max-w-full pb-2">
+                {imageGallery.map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentImageIndex(idx)}
+                    className={`flex-shrink-0 rounded-lg overflow-hidden transition ${
+                      idx === currentImageIndex
+                        ? 'ring-4 ring-purple-500'
+                        : 'ring-2 ring-gray-500 hover:ring-white'
+                    }`}
+                  >
+                    <img
+                      src={img}
+                      alt={`Thumbnail ${idx + 1}`}
+                      className="w-20 h-20 object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Image Counter */}
+            <div className="mt-2 bg-black bg-opacity-50 text-white px-4 py-2 rounded-full text-sm">
+              {currentImageIndex + 1} / {imageGallery.length}
+            </div>
           </div>
         </div>
       )}
