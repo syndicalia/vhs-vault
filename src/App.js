@@ -542,67 +542,117 @@ export default function VHSCollectionTracker() {
   const handleSubmitEntry = async () => {
     try {
       if (submitType === 'master') {
-        // Fetch poster from TMDB
-        const posterUrl = await searchTMDB(newSubmission.masterTitle, newSubmission.year);
+        if (editingMaster) {
+          // Edit existing master
+          const posterUrl = await searchTMDB(newSubmission.masterTitle, newSubmission.year);
 
-        const { data: master, error: masterError } = await supabase
-          .from('master_releases')
-          .insert([{
-            title: newSubmission.masterTitle,
-            year: parseInt(newSubmission.year),
-            director: newSubmission.director,
-            studio: newSubmission.studio,
-            genre: newSubmission.genre,
-            poster_url: posterUrl,
-            created_by: user.id
-          }])
-          .select()
-          .single();
+          const { error: masterError } = await supabase
+            .from('master_releases')
+            .update({
+              title: newSubmission.masterTitle,
+              year: parseInt(newSubmission.year),
+              director: newSubmission.director,
+              studio: newSubmission.studio,
+              genre: newSubmission.genre,
+              poster_url: posterUrl || editingMaster.poster_url
+            })
+            .eq('id', editingMaster.id);
 
-        if (masterError) throw masterError;
+          if (masterError) throw masterError;
 
-        const { data: variant, error: variantError } = await supabase
-          .from('variants')
-          .insert([{
-            master_id: master.id,
-            format: newSubmission.variantFormat,
-            region: newSubmission.variantRegion,
-            release_year: newSubmission.variantRelease,
-            packaging: newSubmission.variantPackaging,
-            notes: newSubmission.variantNotes,
-            barcode: newSubmission.variantBarcode,
-            submitted_by: user.id,
-            approved: false
-          }])
-          .select()
-          .single();
+          alert('Master release updated successfully!');
+          setEditingMaster(null);
+        } else {
+          // Create new master
+          const posterUrl = await searchTMDB(newSubmission.masterTitle, newSubmission.year);
 
-        if (variantError) throw variantError;
+          const { data: master, error: masterError } = await supabase
+            .from('master_releases')
+            .insert([{
+              title: newSubmission.masterTitle,
+              year: parseInt(newSubmission.year),
+              director: newSubmission.director,
+              studio: newSubmission.studio,
+              genre: newSubmission.genre,
+              poster_url: posterUrl,
+              created_by: user.id
+            }])
+            .select()
+            .single();
 
-        await uploadImages(variant.id);
+          if (masterError) throw masterError;
+
+          const { data: variant, error: variantError } = await supabase
+            .from('variants')
+            .insert([{
+              master_id: master.id,
+              format: newSubmission.variantFormat,
+              region: newSubmission.variantRegion,
+              release_year: newSubmission.variantRelease,
+              packaging: newSubmission.variantPackaging,
+              notes: newSubmission.variantNotes,
+              barcode: newSubmission.variantBarcode,
+              submitted_by: user.id,
+              approved: false
+            }])
+            .select()
+            .single();
+
+          if (variantError) throw variantError;
+
+          await uploadImages(variant.id);
+          alert('Submission sent for review!');
+        }
       } else {
-        const { data: variant, error } = await supabase
-          .from('variants')
-          .insert([{
-            master_id: selectedMaster.id,
-            format: newSubmission.variantFormat,
-            region: newSubmission.variantRegion,
-            release_year: newSubmission.variantRelease,
-            packaging: newSubmission.variantPackaging,
-            notes: newSubmission.variantNotes,
-            barcode: newSubmission.variantBarcode,
-            submitted_by: user.id,
-            approved: false
-          }])
-          .select()
-          .single();
+        // Variant only
+        if (editingVariant) {
+          // Edit existing variant
+          const { error } = await supabase
+            .from('variants')
+            .update({
+              format: newSubmission.variantFormat,
+              region: newSubmission.variantRegion,
+              release_year: newSubmission.variantRelease,
+              packaging: newSubmission.variantPackaging,
+              notes: newSubmission.variantNotes,
+              barcode: newSubmission.variantBarcode
+            })
+            .eq('id', editingVariant.id);
 
-        if (error) throw error;
+          if (error) throw error;
 
-        await uploadImages(variant.id);
+          // Upload any new images
+          if (newSubmission.imageFiles.length > 0) {
+            await uploadImages(editingVariant.id);
+          }
+
+          alert('Variant updated successfully!');
+          setEditingVariant(null);
+        } else {
+          // Create new variant
+          const { data: variant, error } = await supabase
+            .from('variants')
+            .insert([{
+              master_id: selectedMaster.id,
+              format: newSubmission.variantFormat,
+              region: newSubmission.variantRegion,
+              release_year: newSubmission.variantRelease,
+              packaging: newSubmission.variantPackaging,
+              notes: newSubmission.variantNotes,
+              barcode: newSubmission.variantBarcode,
+              submitted_by: user.id,
+              approved: false
+            }])
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          await uploadImages(variant.id);
+          alert('Submission sent for review!');
+        }
       }
 
-      alert('Submission sent for review!');
       setShowSubmitModal(false);
       setNewSubmission({
         masterTitle: '', year: '', director: '', studio: '', genre: '',
@@ -818,15 +868,36 @@ export default function VHSCollectionTracker() {
                   >
                     ← Back to list
                   </button>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => deleteMasterRelease(selectedMaster.id)}
-                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center space-x-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>Delete Master</span>
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingMaster(selectedMaster);
+                          setNewSubmission({
+                            ...newSubmission,
+                            masterTitle: selectedMaster.title,
+                            year: selectedMaster.year.toString(),
+                            director: selectedMaster.director,
+                            studio: selectedMaster.studio,
+                            genre: selectedMaster.genre
+                          });
+                          setShowSubmitModal(true);
+                          setSubmitType('master');
+                        }}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center space-x-2"
+                      >
+                        <Edit className="w-4 h-4" />
+                        <span>Edit Master</span>
+                      </button>
+                      <button
+                        onClick={() => deleteMasterRelease(selectedMaster.id)}
+                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center space-x-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete Master</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                   <div className="flex gap-6 mb-4">
@@ -976,13 +1047,38 @@ export default function VHSCollectionTracker() {
                             >
                               <Heart className={`w-4 h-4 ${inWish ? 'fill-current' : ''}`} />
                             </button>
-                            <button
-                              onClick={() => deleteVariant(variant.id)}
-                              className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
-                              title="Delete variant"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {isAdmin && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setEditingVariant(variant);
+                                    setNewSubmission({
+                                      ...newSubmission,
+                                      variantFormat: variant.format,
+                                      variantRegion: variant.region,
+                                      variantRelease: variant.release_year,
+                                      variantPackaging: variant.packaging,
+                                      variantNotes: variant.notes || '',
+                                      variantBarcode: variant.barcode || '',
+                                      imageFiles: []
+                                    });
+                                    setShowSubmitModal(true);
+                                    setSubmitType('variant');
+                                  }}
+                                  className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"
+                                  title="Edit variant"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => deleteVariant(variant.id)}
+                                  className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
+                                  title="Delete variant"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1298,10 +1394,20 @@ export default function VHSCollectionTracker() {
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">
-                  {submitType === 'master' ? 'Submit New Title' : 'Submit New Variant'}
+                  {editingMaster
+                    ? 'Edit Master Release'
+                    : editingVariant
+                      ? 'Edit Variant'
+                      : submitType === 'master'
+                        ? 'Submit New Title'
+                        : 'Submit New Variant'}
                 </h2>
                 <button
-                  onClick={() => setShowSubmitModal(false)}
+                  onClick={() => {
+                    setShowSubmitModal(false);
+                    setEditingMaster(null);
+                    setEditingVariant(null);
+                  }}
                   className="p-2 hover:bg-gray-100 rounded-lg transition"
                 >
                   <X className="w-6 h-6" />
@@ -1373,12 +1479,13 @@ export default function VHSCollectionTracker() {
                   </>
                 )}
 
-                <div className="border-t pt-4">
-                  <h3 className="font-bold text-gray-800 mb-4">
-                    {submitType === 'master' ? 'Initial Variant Details' : 'Variant Details'}
-                  </h3>
+                {!editingMaster && (
+                  <div className="border-t pt-4">
+                    <h3 className="font-bold text-gray-800 mb-4">
+                      {submitType === 'master' ? 'Initial Variant Details' : 'Variant Details'}
+                    </h3>
 
-                  <div className="space-y-4">
+                    <div className="space-y-4">
                     <div className="grid md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
@@ -1526,9 +1633,11 @@ export default function VHSCollectionTracker() {
                       )}
                     </div>
                   </div>
-                </div>
+                  </div>
+                )}
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                {!editingMaster && !editingVariant && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
                   <div className="flex items-start space-x-2">
                     <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
                     <div>
@@ -1538,11 +1647,16 @@ export default function VHSCollectionTracker() {
                       </p>
                     </div>
                   </div>
-                </div>
+                  </div>
+                )}
 
                 <div className="flex space-x-3 pt-4">
                   <button
-                    onClick={() => setShowSubmitModal(false)}
+                    onClick={() => {
+                      setShowSubmitModal(false);
+                      setEditingMaster(null);
+                      setEditingVariant(null);
+                    }}
                     className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
                   >
                     Cancel
@@ -1551,7 +1665,7 @@ export default function VHSCollectionTracker() {
                     onClick={handleSubmitEntry}
                     className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
                   >
-                    Submit for Review
+                    {editingMaster || editingVariant ? 'Update' : 'Submit for Review'}
                   </button>
                 </div>
               </div>
