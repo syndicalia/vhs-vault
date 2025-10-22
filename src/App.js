@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle } from 'lucide-react';
 
+const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
+const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
+
 export default function VHSCollectionTracker() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -151,6 +154,26 @@ export default function VHSCollectionTracker() {
         votesMap[vote.variant_id] = vote.vote_type;
       });
       setUserVotes(votesMap);
+    }
+  };
+
+  const searchTMDB = async (title, year) => {
+    try {
+      const response = await fetch(
+        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(title)}&year=${year}`
+      );
+      const data = await response.json();
+
+      if (data.results && data.results.length > 0) {
+        const movie = data.results[0];
+        if (movie.poster_path) {
+          return `${TMDB_IMAGE_BASE}${movie.poster_path}`;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('TMDB search error:', error);
+      return null;
     }
   };
 
@@ -434,6 +457,9 @@ export default function VHSCollectionTracker() {
   const handleSubmitEntry = async () => {
     try {
       if (submitType === 'master') {
+        // Fetch poster from TMDB
+        const posterUrl = await searchTMDB(newSubmission.masterTitle, newSubmission.year);
+
         const { data: master, error: masterError } = await supabase
           .from('master_releases')
           .insert([{
@@ -442,6 +468,7 @@ export default function VHSCollectionTracker() {
             director: newSubmission.director,
             studio: newSubmission.studio,
             genre: newSubmission.genre,
+            poster_url: posterUrl,
             created_by: user.id
           }])
           .select()
@@ -661,8 +688,19 @@ export default function VHSCollectionTracker() {
                     className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer"
                     onClick={() => setSelectedMaster(master)}
                   >
-                    <div className="flex justify-between items-start">
-                      <div>
+                    <div className="flex gap-4 items-start">
+                      {master.poster_url ? (
+                        <img
+                          src={master.poster_url}
+                          alt={`${master.title} poster`}
+                          className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-24 h-36 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                          <Film className="w-12 h-12 text-purple-400" />
+                        </div>
+                      )}
+                      <div className="flex-1">
                         <h2 className="text-xl font-bold text-gray-800 mb-1">{master.title}</h2>
                         <p className="text-gray-600">{master.director} • {master.year} • {master.genre}</p>
                         <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
@@ -675,7 +713,6 @@ export default function VHSCollectionTracker() {
                           <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
                         </div>
                       </div>
-                      <div className="text-2xl">🎬</div>
                     </div>
                   </div>
                 ))}
@@ -696,8 +733,20 @@ export default function VHSCollectionTracker() {
                   ← Back to list
                 </button>
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
+                  <div className="flex gap-6 mb-4">
+                    {selectedMaster.poster_url ? (
+                      <img
+                        src={selectedMaster.poster_url}
+                        alt={`${selectedMaster.title} poster`}
+                        className="w-48 h-72 object-cover rounded shadow-lg flex-shrink-0 cursor-pointer hover:shadow-xl transition"
+                        onClick={() => setImageModalUrl(selectedMaster.poster_url)}
+                      />
+                    ) : (
+                      <div className="w-48 h-72 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-lg flex items-center justify-center flex-shrink-0">
+                        <Film className="w-24 h-24 text-purple-400" />
+                      </div>
+                    )}
+                    <div className="flex-1">
                       <h2 className="text-2xl font-bold text-gray-800 mb-2">{selectedMaster.title}</h2>
                       <p className="text-gray-600 mb-1">Directed by {selectedMaster.director}</p>
                       <p className="text-gray-600 mb-1">Released: {selectedMaster.year}</p>
@@ -733,7 +782,6 @@ export default function VHSCollectionTracker() {
                         </div>
                       </div>
                     </div>
-                    <div className="text-4xl">🎬</div>
                   </div>
                 </div>
 
@@ -871,6 +919,27 @@ export default function VHSCollectionTracker() {
                         <p className="text-gray-700 text-sm">
                           {item.variant.release_year} • {item.variant.packaging}
                         </p>
+
+                        {item.variant.variant_images && item.variant.variant_images.length > 0 && (
+                          <div className="mt-3">
+                            <div className="flex items-center space-x-2 overflow-x-auto">
+                              {item.variant.variant_images.slice(0, 4).map((img, imgIdx) => (
+                                <img
+                                  key={imgIdx}
+                                  src={img.image_url}
+                                  alt={`Variant ${imgIdx + 1}`}
+                                  className="w-16 h-16 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                  onClick={() => setImageModalUrl(img.image_url)}
+                                />
+                              ))}
+                              {item.variant.variant_images.length > 4 && (
+                                <div className="w-16 h-16 bg-gray-200 rounded border-2 border-gray-300 flex items-center justify-center text-gray-600 text-sm font-medium">
+                                  +{item.variant.variant_images.length - 4}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <button
                         onClick={() => removeFromCollection(item.variant.id)}
