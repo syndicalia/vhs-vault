@@ -23,6 +23,7 @@ export default function VHSCollectionTracker() {
   const [view, setView] = useState('browse');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitType, setSubmitType] = useState('variant');
+  const [imageModalUrl, setImageModalUrl] = useState(null);
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -321,17 +322,26 @@ export default function VHSCollectionTracker() {
 
   const approveSubmission = async (variantId) => {
     try {
-      const { error } = await supabase
+      console.log('Approving variant:', variantId);
+
+      const { data, error } = await supabase
         .from('variants')
         .update({ approved: true })
-        .eq('id', variantId);
+        .eq('id', variantId)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Approval error:', error);
+        throw error;
+      }
 
+      console.log('Approval successful:', data);
       alert('Submission approved!');
-      await loadPendingSubmissions();
-      await loadMasterReleases();
+
+      // Reload all data to ensure consistency
+      await loadAllData();
     } catch (error) {
+      console.error('Error in approveSubmission:', error);
       alert('Error approving submission: ' + error.message);
     }
   };
@@ -783,7 +793,7 @@ export default function VHSCollectionTracker() {
                                       src={img.image_url}
                                       alt={`Variant ${idx + 1}`}
                                       className="w-16 h-16 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                      onClick={() => window.open(img.image_url, '_blank')}
+                                      onClick={() => setImageModalUrl(img.image_url)}
                                     />
                                   ))}
                                   {variant.variant_images.length > 4 && (
@@ -1087,7 +1097,7 @@ export default function VHSCollectionTracker() {
                                 src={img.image_url}
                                 alt={`Submission image ${idx + 1}`}
                                 className="w-full h-24 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                onClick={() => window.open(img.image_url, '_blank')}
+                                onClick={() => setImageModalUrl(img.image_url)}
                               />
                             ))}
                           </div>
@@ -1145,9 +1155,16 @@ export default function VHSCollectionTracker() {
                         <input
                           type="text"
                           value={newSubmission.year}
-                          onChange={(e) => setNewSubmission({...newSubmission, year: e.target.value})}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Only allow numbers and limit to 4 digits
+                            if (value === '' || (/^\d{0,4}$/.test(value))) {
+                              setNewSubmission({...newSubmission, year: value});
+                            }
+                          }}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                           placeholder="1999"
+                          maxLength="4"
                         />
                       </div>
                       <div>
@@ -1205,13 +1222,22 @@ export default function VHSCollectionTracker() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Region</label>
-                        <input
-                          type="text"
+                        <select
                           value={newSubmission.variantRegion}
                           onChange={(e) => setNewSubmission({...newSubmission, variantRegion: e.target.value})}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="NTSC (USA), PAL (UK), etc."
-                        />
+                        >
+                          <option value="">Select Region</option>
+                          <option value="NTSC (USA)">NTSC (USA)</option>
+                          <option value="NTSC (Japan)">NTSC (Japan)</option>
+                          <option value="NTSC (Canada)">NTSC (Canada)</option>
+                          <option value="PAL (UK)">PAL (UK)</option>
+                          <option value="PAL (Europe)">PAL (Europe)</option>
+                          <option value="PAL (Australia)">PAL (Australia)</option>
+                          <option value="SECAM (France)">SECAM (France)</option>
+                          <option value="SECAM (Russia)">SECAM (Russia)</option>
+                          <option value="Multi-Region">Multi-Region</option>
+                        </select>
                       </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
@@ -1220,20 +1246,36 @@ export default function VHSCollectionTracker() {
                         <input
                           type="text"
                           value={newSubmission.variantRelease}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantRelease: e.target.value})}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Only allow numbers and limit to 4 digits
+                            if (value === '' || (/^\d{0,4}$/.test(value))) {
+                              setNewSubmission({...newSubmission, variantRelease: value});
+                            }
+                          }}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                           placeholder="1999"
+                          maxLength="4"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Packaging</label>
-                        <input
-                          type="text"
+                        <select
                           value={newSubmission.variantPackaging}
                           onChange={(e) => setNewSubmission({...newSubmission, variantPackaging: e.target.value})}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="Clamshell, Slipcover, etc."
-                        />
+                        >
+                          <option value="">Select Packaging</option>
+                          <option value="Clamshell">Clamshell</option>
+                          <option value="Slipcover">Slipcover</option>
+                          <option value="Cardboard Sleeve">Cardboard Sleeve</option>
+                          <option value="Plastic Case">Plastic Case</option>
+                          <option value="Big Box">Big Box</option>
+                          <option value="Standard Case">Standard Case</option>
+                          <option value="Rental Case">Rental Case</option>
+                          <option value="Screener">Screener</option>
+                          <option value="Promotional">Promotional</option>
+                        </select>
                       </div>
                     </div>
                     <div>
@@ -1342,6 +1384,28 @@ export default function VHSCollectionTracker() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {imageModalUrl && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50"
+          onClick={() => setImageModalUrl(null)}
+        >
+          <div className="relative max-w-5xl max-h-[90vh]">
+            <button
+              onClick={() => setImageModalUrl(null)}
+              className="absolute -top-4 -right-4 bg-white text-gray-800 rounded-full p-2 hover:bg-gray-100 transition shadow-lg z-10"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={imageModalUrl}
+              alt="Enlarged preview"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
           </div>
         </div>
       )}
