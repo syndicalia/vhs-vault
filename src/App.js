@@ -24,7 +24,7 @@ export default function VHSCollectionTracker() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMaster, setSelectedMaster] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
-  const [view, setView] = useState('browse');
+  const [view, setView] = useState('search');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitType, setSubmitType] = useState('variant');
   const [imageGallery, setImageGallery] = useState([]);
@@ -73,6 +73,15 @@ export default function VHSCollectionTracker() {
       checkAdminStatus();
     }
   }, [user]);
+
+  useEffect(() => {
+    // Set default view based on admin status
+    if (view === 'browse' && !isAdmin) {
+      setView('search');
+    } else if (view === 'search' && isAdmin) {
+      setView('browse');
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     // Close TMDB dropdown when clicking outside
@@ -919,10 +928,17 @@ export default function VHSCollectionTracker() {
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-2 md:space-x-8 overflow-x-auto">
-            {['browse', 'collection', 'wishlist', 'marketplace', 'pending'].map(tab => (
+            {(isAdmin
+              ? ['browse', 'collection', 'wishlist', 'marketplace', 'pending']
+              : ['search', 'collection', 'wishlist', 'pending']
+            ).map(tab => (
               <button
                 key={tab}
-                onClick={() => { setView(tab); setSelectedMaster(null); }}
+                onClick={() => {
+                  setView(tab);
+                  setSelectedMaster(null);
+                  setSelectedVariant(null);
+                }}
                 className={`py-4 px-2 border-b-2 font-medium transition whitespace-nowrap capitalize ${
                   view === tab ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
@@ -937,7 +953,7 @@ export default function VHSCollectionTracker() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {view === 'browse' && (
+        {(view === 'browse' || view === 'search') && (
           <>
             <div className="flex flex-col md:flex-row gap-4 mb-6">
               <div className="relative flex-1">
@@ -950,13 +966,15 @@ export default function VHSCollectionTracker() {
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
-              <button
-                onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
-                className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add New Title</span>
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
+                  className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Add New Title</span>
+                </button>
+              )}
             </div>
 
             {selectedVariant ? (
