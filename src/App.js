@@ -1,3 +1,5 @@
+// FINAL COMPLETE App.js - Copy this ENTIRE file
+// Start copying from this line all the way to the bottom
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle } from 'lucide-react';
@@ -9,7 +11,7 @@ export default function VHSCollectionTracker() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-
+  
   const [masterReleases, setMasterReleases] = useState([]);
   const [collection, setCollection] = useState([]);
   const [wishlist, setWishlist] = useState([]);
@@ -17,13 +19,15 @@ export default function VHSCollectionTracker() {
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [marketplace, setMarketplace] = useState([]);
   const [userVotes, setUserVotes] = useState({});
-
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [lightboxImage, setLightboxImage] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMaster, setSelectedMaster] = useState(null);
   const [view, setView] = useState('browse');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitType, setSubmitType] = useState('variant');
-
+  
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
     year: '',
@@ -38,6 +42,33 @@ export default function VHSCollectionTracker() {
     variantBarcode: '',
     imageFiles: []
   });
+
+  // Controlled vocabularies & validation
+  const REGION_OPTIONS = [
+    'US (NTSC)', 'Japan (NTSC-J)', 'Europe (PAL)', 'Australia/NZ (PAL)', 'SECAM', 'Other'
+  ];
+  const PACKAGING_OPTIONS = [
+    'Slipcover', 'Clamshell', 'Big Box', 'Library Case', 'Other'
+  ];
+
+  const validateSubmission = () => {
+    // Region & packaging must be one of the dropdown values
+    if (!REGION_OPTIONS.includes(newSubmission.variantRegion)) {
+      alert('Please choose a valid Region from the dropdown.');
+      return false;
+    }
+    if (!PACKAGING_OPTIONS.includes(newSubmission.variantPackaging)) {
+      alert('Please choose a valid Packaging from the dropdown.');
+      return false;
+    }
+    // Release year: 4 numeric digits (allow blank)
+    if (newSubmission.variantRelease && !/^\d{4}$/.test(String(newSubmission.variantRelease))) {
+      alert('Release Year must be a 4-digit number (e.g., 1999).');
+      return false;
+    }
+    return true;
+  };
+
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -83,7 +114,7 @@ export default function VHSCollectionTracker() {
     const { data, error } = await supabase
       .from('master_releases')
       .select('*, variants(*, variant_images(*))');
-
+    
     if (!error && data) {
       setMasterReleases(data);
     }
@@ -94,7 +125,7 @@ export default function VHSCollectionTracker() {
       .from('user_collections')
       .select('*')
       .eq('user_id', user.id);
-
+    
     if (!error) setCollection(data || []);
   };
 
@@ -103,7 +134,7 @@ export default function VHSCollectionTracker() {
       .from('user_wishlists')
       .select('*')
       .eq('user_id', user.id);
-
+    
     if (!error) setWishlist(data || []);
   };
 
@@ -112,7 +143,7 @@ export default function VHSCollectionTracker() {
       .from('user_ratings')
       .select('*')
       .eq('user_id', user.id);
-
+    
     if (!error) setRatings(data || []);
   };
 
@@ -125,7 +156,7 @@ export default function VHSCollectionTracker() {
         variant_images(*)
       `)
       .eq('approved', false);
-
+    
     if (!error) setPendingSubmissions(data || []);
   };
 
@@ -134,7 +165,7 @@ export default function VHSCollectionTracker() {
       .from('marketplace_listings')
       .select('*, master_releases(*), variants(*)')
       .eq('active', true);
-
+    
     if (!error) setMarketplace(data || []);
   };
 
@@ -143,7 +174,7 @@ export default function VHSCollectionTracker() {
       .from('submission_votes')
       .select('variant_id, vote_type')
       .eq('user_id', user.id);
-
+    
     if (!error && data) {
       const votesMap = {};
       data.forEach(vote => {
@@ -176,7 +207,7 @@ export default function VHSCollectionTracker() {
     const { error } = await supabase
       .from('user_collections')
       .insert([{ user_id: user.id, master_id: masterId, variant_id: variantId }]);
-
+    
     if (!error) loadUserCollection();
   };
 
@@ -186,7 +217,7 @@ export default function VHSCollectionTracker() {
       .delete()
       .eq('user_id', user.id)
       .eq('variant_id', variantId);
-
+    
     loadUserCollection();
   };
 
@@ -196,7 +227,7 @@ export default function VHSCollectionTracker() {
 
   const toggleWishlist = async (masterId, variantId) => {
     const exists = wishlist.some(item => item.variant_id === variantId);
-
+    
     if (exists) {
       await supabase
         .from('user_wishlists')
@@ -208,7 +239,7 @@ export default function VHSCollectionTracker() {
         .from('user_wishlists')
         .insert([{ user_id: user.id, master_id: masterId, variant_id: variantId }]);
     }
-
+    
     loadUserWishlist();
   };
 
@@ -218,7 +249,7 @@ export default function VHSCollectionTracker() {
 
   const setRating = async (masterId, rating) => {
     const existing = ratings.find(r => r.master_id === masterId);
-
+    
     if (existing) {
       await supabase
         .from('user_ratings')
@@ -229,7 +260,7 @@ export default function VHSCollectionTracker() {
         .from('user_ratings')
         .insert([{ user_id: user.id, master_id: masterId, rating }]);
     }
-
+    
     loadUserRatings();
     updateAverageRating(masterId);
   };
@@ -244,14 +275,14 @@ export default function VHSCollectionTracker() {
       .from('user_ratings')
       .select('rating')
       .eq('master_id', masterId);
-
+    
     if (data && data.length > 0) {
       const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
       await supabase
         .from('master_releases')
         .update({ avg_rating: avg.toFixed(1), total_ratings: data.length })
         .eq('id', masterId);
-
+      
       loadMasterReleases();
     }
   };
@@ -264,19 +295,19 @@ export default function VHSCollectionTracker() {
         .eq('user_id', user.id)
         .eq('variant_id', variantId)
         .maybeSingle();
-
+      
       if (fetchError && fetchError.code !== 'PGRST116') {
         console.error('Error checking vote:', fetchError);
         return;
       }
-
+      
       if (existing) {
         if (existing.vote_type === voteType) {
           await supabase
             .from('submission_votes')
             .delete()
             .eq('id', existing.id);
-
+          
           const newVotes = { ...userVotes };
           delete newVotes[variantId];
           setUserVotes(newVotes);
@@ -285,17 +316,17 @@ export default function VHSCollectionTracker() {
             .from('submission_votes')
             .update({ vote_type: voteType })
             .eq('id', existing.id);
-
+          
           setUserVotes({ ...userVotes, [variantId]: voteType });
         }
       } else {
         await supabase
           .from('submission_votes')
           .insert([{ user_id: user.id, variant_id: variantId, vote_type: voteType }]);
-
+        
         setUserVotes({ ...userVotes, [variantId]: voteType });
       }
-
+      
       await updateVoteCounts(variantId);
       await loadPendingSubmissions();
     } catch (error) {
@@ -309,10 +340,10 @@ export default function VHSCollectionTracker() {
       .from('submission_votes')
       .select('vote_type')
       .eq('variant_id', variantId);
-
+    
     const upVotes = votes?.filter(v => v.vote_type === 'up').length || 0;
     const downVotes = votes?.filter(v => v.vote_type === 'down').length || 0;
-
+    
     await supabase
       .from('variants')
       .update({ votes_up: upVotes, votes_down: downVotes })
@@ -325,12 +356,22 @@ export default function VHSCollectionTracker() {
         .from('variants')
         .update({ approved: true })
         .eq('id', variantId);
-
       if (error) throw error;
 
+      // Optimistically remove from local pending list
+      setPendingSubmissions(prev => prev.filter(p => p.id !== variantId));
       alert('Submission approved!');
-      await loadPendingSubmissions();
+
+      // Refresh masters and the currently selected master so the variant appears immediately
       await loadMasterReleases();
+      if (selectedMaster) {
+        const { data, error: mErr } = await supabase
+          .from('master_releases')
+          .select('*, variants(*, variant_images(*))')
+          .eq('id', selectedMaster.id)
+          .single();
+        if (!mErr && data) setSelectedMaster(data);
+      }
     } catch (error) {
       alert('Error approving submission: ' + error.message);
     }
@@ -340,13 +381,13 @@ export default function VHSCollectionTracker() {
     if (!window.confirm('Are you sure you want to reject this submission? This will delete it permanently.')) {
       return;
     }
-
+    
     try {
       const { data: images } = await supabase
         .from('variant_images')
         .select('image_url')
         .eq('variant_id', variantId);
-
+      
       if (images) {
         for (const img of images) {
           const fileName = img.image_url.split('/').pop();
@@ -355,14 +396,14 @@ export default function VHSCollectionTracker() {
             .remove([fileName]);
         }
       }
-
+      
       const { error } = await supabase
         .from('variants')
         .delete()
         .eq('id', variantId);
-
+      
       if (error) throw error;
-
+      
       alert('Submission rejected and deleted.');
       await loadPendingSubmissions();
     } catch (error) {
@@ -374,20 +415,20 @@ export default function VHSCollectionTracker() {
     const files = Array.from(e.target.files);
     const currentCount = newSubmission.imageFiles.length;
     const remaining = 5 - currentCount;
-
+    
     if (files.length > remaining) {
       alert(`You can only upload ${remaining} more image(s). Maximum is 5 images per variant.`);
       return;
     }
-
+    
     const filesWithPreviews = files.map(file => ({
       file,
       preview: URL.createObjectURL(file)
     }));
-
-    setNewSubmission({
-      ...newSubmission,
-      imageFiles: [...newSubmission.imageFiles, ...filesWithPreviews]
+    
+    setNewSubmission({ 
+      ...newSubmission, 
+      imageFiles: [...newSubmission.imageFiles, ...filesWithPreviews] 
     });
   };
 
@@ -411,7 +452,7 @@ export default function VHSCollectionTracker() {
 
       if (!error) {
         const { data } = supabase.storage.from('variant-images').getPublicUrl(fileName);
-
+        
         await supabase.from('variant_images').insert([{
           variant_id: variantId,
           image_url: data.publicUrl,
@@ -422,6 +463,7 @@ export default function VHSCollectionTracker() {
   };
 
   const handleSubmitEntry = async () => {
+    if (!validateSubmission()) return;
     try {
       if (submitType === 'master') {
         const { data: master, error: masterError } = await supabase
@@ -436,16 +478,16 @@ export default function VHSCollectionTracker() {
           }])
           .select()
           .single();
-
+        
         if (masterError) throw masterError;
-
+        
         const { data: variant, error: variantError } = await supabase
           .from('variants')
           .insert([{
             master_id: master.id,
             format: newSubmission.variantFormat,
             region: newSubmission.variantRegion,
-            release_year: newSubmission.variantRelease,
+            release_year: newSubmission.variantRelease ? parseInt(newSubmission.variantRelease, 10) : null,
             packaging: newSubmission.variantPackaging,
             notes: newSubmission.variantNotes,
             barcode: newSubmission.variantBarcode,
@@ -454,9 +496,9 @@ export default function VHSCollectionTracker() {
           }])
           .select()
           .single();
-
+        
         if (variantError) throw variantError;
-
+        
         await uploadImages(variant.id);
       } else {
         const { data: variant, error } = await supabase
@@ -465,7 +507,7 @@ export default function VHSCollectionTracker() {
             master_id: selectedMaster.id,
             format: newSubmission.variantFormat,
             region: newSubmission.variantRegion,
-            release_year: newSubmission.variantRelease,
+            release_year: newSubmission.variantRelease ? parseInt(newSubmission.variantRelease, 10) : null,
             packaging: newSubmission.variantPackaging,
             notes: newSubmission.variantNotes,
             barcode: newSubmission.variantBarcode,
@@ -474,12 +516,12 @@ export default function VHSCollectionTracker() {
           }])
           .select()
           .single();
-
+        
         if (error) throw error;
-
+        
         await uploadImages(variant.id);
       }
-
+      
       alert('Submission sent for review!');
       setShowSubmitModal(false);
       setNewSubmission({
@@ -487,7 +529,7 @@ export default function VHSCollectionTracker() {
         variantFormat: 'VHS', variantRegion: '', variantRelease: '',
         variantPackaging: '', variantNotes: '', variantBarcode: '', imageFiles: []
       });
-
+      
       loadAllData();
     } catch (error) {
       alert('Error: ' + error.message);
@@ -570,6 +612,7 @@ export default function VHSCollectionTracker() {
   }
 
   return (
+  <>
     <div className="min-h-screen bg-gray-50">
       <div className="bg-purple-600 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -693,7 +736,7 @@ export default function VHSCollectionTracker() {
                       <p className="text-gray-600 mb-1">Released: {selectedMaster.year}</p>
                       <p className="text-gray-600 mb-1">Studio: {selectedMaster.studio}</p>
                       <p className="text-gray-600 mb-3">Genre: {selectedMaster.genre}</p>
-
+                      
                       <div className="flex items-center space-x-4 mb-4">
                         <div className="flex items-center space-x-1">
                           <Star className="w-5 h-5 text-yellow-500 fill-current" />
@@ -773,7 +816,7 @@ export default function VHSCollectionTracker() {
                             <p className="text-xs text-gray-500 mt-2">
                               {variant.votes_up || 0} 👍 {variant.votes_down || 0} 👎
                             </p>
-
+                            
                             {variant.variant_images && variant.variant_images.length > 0 && (
                               <div className="mt-3">
                                 <div className="flex items-center space-x-2 overflow-x-auto">
@@ -783,7 +826,7 @@ export default function VHSCollectionTracker() {
                                       src={img.image_url}
                                       alt={`Variant ${idx + 1}`}
                                       className="w-16 h-16 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                      onClick={() => window.open(img.image_url, '_blank')}
+                                      onClick={() => { setPreviewImage(img.image_url); setLightboxOpen(true); }}
                                     />
                                   ))}
                                   {variant.variant_images.length > 4 && (
@@ -975,8 +1018,8 @@ export default function VHSCollectionTracker() {
               )}
             </div>
             <p className="text-gray-600 mb-6">
-              {isAdmin
-                ? 'Review and approve/reject community submissions'
+              {isAdmin 
+                ? 'Review and approve/reject community submissions' 
                 : 'Vote on community submissions to help maintain database quality'
               }
             </p>
@@ -1039,11 +1082,11 @@ export default function VHSCollectionTracker() {
                           </div>
                         )}
                       </div>
-
+                      
                       <h3 className="text-xl font-bold text-gray-800 mb-2">
                         New Variant for: {submission.master_releases.title}
                       </h3>
-
+                      
                       <div className="grid md:grid-cols-2 gap-4 mb-4">
                         <div>
                           <p className="text-sm font-semibold text-gray-700 mb-1">Format</p>
@@ -1087,7 +1130,7 @@ export default function VHSCollectionTracker() {
                                 src={img.image_url}
                                 alt={`Submission image ${idx + 1}`}
                                 className="w-full h-24 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                onClick={() => window.open(img.image_url, '_blank')}
+                                onClick={() => { setPreviewImage(img.image_url); setLightboxOpen(true); }}
                               />
                             ))}
                           </div>
@@ -1120,10 +1163,30 @@ export default function VHSCollectionTracker() {
                 </h2>
                 <button
                   onClick={() => setShowSubmitModal(false)}
+
+        >
+          <img
+            src={previewImage}
+            alt="Preview"
+            className="max-h-[90vh] max-w-[90vw] rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            aria-label="Close preview"
+            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+	  </button></div>
+      )}
+
                   className="p-2 hover:bg-gray-100 rounded-lg transition"
                 >
                   <X className="w-6 h-6" />
-                </button>
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -1188,7 +1251,7 @@ export default function VHSCollectionTracker() {
                   <h3 className="font-bold text-gray-800 mb-4">
                     {submitType === 'master' ? 'Initial Variant Details' : 'Variant Details'}
                   </h3>
-
+                  
                   <div className="space-y-4">
                     <div className="grid md:grid-cols-2 gap-4">
                       <div>
@@ -1205,13 +1268,13 @@ export default function VHSCollectionTracker() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Region</label>
-                        <input
-                          type="text"
-                          value={newSubmission.variantRegion}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantRegion: e.target.value})}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="NTSC (USA), PAL (UK), etc."
-                        />
+                            <select
+                              value={newSubmission.variantRegion}
+                              onChange={(e) => setNewSubmission({ ...newSubmission, variantRegion: e.target.value })}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            >
+                              {REGION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            </select>
                       </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
@@ -1219,21 +1282,27 @@ export default function VHSCollectionTracker() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Release Year</label>
                         <input
                           type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]{4}"
+                          maxLength={4}
                           value={newSubmission.variantRelease}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantRelease: e.target.value})}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                            setNewSubmission({ ...newSubmission, variantRelease: val });
+                          }}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                           placeholder="1999"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Packaging</label>
-                        <input
-                          type="text"
+                        <select
                           value={newSubmission.variantPackaging}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantPackaging: e.target.value})}
+                          onChange={(e) => setNewSubmission({ ...newSubmission, variantPackaging: e.target.value })}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="Clamshell, Slipcover, etc."
-                        />
+                        >
+                          {PACKAGING_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
                       </div>
                     </div>
                     <div>
@@ -1271,14 +1340,14 @@ export default function VHSCollectionTracker() {
                           id="image-upload"
                           disabled={newSubmission.imageFiles.length >= 5}
                         />
-                        <label
-                          htmlFor="image-upload"
+                        <label 
+                          htmlFor="image-upload" 
                           className={`cursor-pointer ${newSubmission.imageFiles.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                           <Upload className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                           <p className="text-gray-600">
-                            {newSubmission.imageFiles.length >= 5
-                              ? 'Maximum 5 images reached'
+                            {newSubmission.imageFiles.length >= 5 
+                              ? 'Maximum 5 images reached' 
                               : 'Click to upload images'
                             }
                           </p>
@@ -1291,9 +1360,9 @@ export default function VHSCollectionTracker() {
                         <div className="mt-4 grid grid-cols-5 gap-2">
                           {newSubmission.imageFiles.map((fileObj, idx) => (
                             <div key={idx} className="relative group">
-                              <img
-                                src={fileObj.preview}
-                                alt={`Preview ${idx + 1}`}
+                              <img 
+                                src={fileObj.preview} 
+                                alt={`Preview ${idx + 1}`} 
                                 className="w-full h-24 object-cover rounded border-2 border-gray-300"
                               />
                               <button
@@ -1329,12 +1398,6 @@ export default function VHSCollectionTracker() {
                 <div className="flex space-x-3 pt-4">
                   <button
                     onClick={() => setShowSubmitModal(false)}
-                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSubmitEntry}
                     className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
                   >
                     Submit for Review
@@ -1346,5 +1409,29 @@ export default function VHSCollectionTracker() {
         </div>
       )}
     </div>
+      {/* Lightbox for image previews */}
+      {lightboxOpen && previewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <img
+            src={previewImage}
+            alt="Preview"
+            className="max-h-[90vh] max-w-[90vw] rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            aria-label="Close preview"
+            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
   );
 }
