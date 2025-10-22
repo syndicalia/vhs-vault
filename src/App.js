@@ -337,38 +337,29 @@ export default function VHSCollectionTracker() {
 };
 
   const rejectSubmission = async (variantId) => {
-    if (!window.confirm('Are you sure you want to reject this submission? This will delete it permanently.')) {
+  if (!window.confirm('Are you sure you want to reject this submission? This will delete it permanently.')) {
+    return;
+  }
+  
+  try {
+    // Just delete the variant - images will cascade delete automatically
+    const { error } = await supabase
+      .from('variants')
+      .delete()
+      .eq('id', variantId);
+    
+    if (error) {
+      console.error('Delete error:', error);
+      alert('Error: ' + error.message);
       return;
     }
-
-    try {
-      const { data: images } = await supabase
-        .from('variant_images')
-        .select('image_url')
-        .eq('variant_id', variantId);
-
-      if (images) {
-        for (const img of images) {
-          const fileName = img.image_url.split('/').pop();
-          await supabase.storage
-            .from('variant-images')
-            .remove([fileName]);
-        }
-      }
-
-      const { error } = await supabase
-        .from('variants')
-        .delete()
-        .eq('id', variantId);
-
-      if (error) throw error;
-
-      alert('Submission rejected and deleted.');
-      await loadPendingSubmissions();
-    } catch (error) {
-      alert('Error rejecting submission: ' + error.message);
-    }
-  };
+    
+    alert('Submission rejected and deleted.');
+    await loadPendingSubmissions();
+  } catch (error) {
+    alert('Error rejecting: ' + error.message);
+  }
+};
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
