@@ -1089,13 +1089,63 @@ export default function VHSCollectionTracker() {
                           e.stopPropagation();
                           console.log('Movie clicked:', movie.title);
 
-                          // Auto-fill the form with TMDB data and open submit modal
-                          await selectTmdbMovie(movie);
+                          // Fetch full movie details from TMDB
+                          try {
+                            const response = await fetch(
+                              `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+                            );
+                            const details = await response.json();
 
-                          console.log('Opening modal...');
-                          setSearchTerm('');
-                          setSubmitType('master');
-                          setShowSubmitModal(true);
+                            // Extract director
+                            let director = '';
+                            if (details.credits && details.credits.crew) {
+                              const directorObj = details.credits.crew.find(person => person.job === 'Director');
+                              director = directorObj ? directorObj.name : '';
+                            }
+
+                            // Extract studio
+                            let studio = '';
+                            if (details.production_companies && details.production_companies.length > 0) {
+                              studio = details.production_companies[0].name;
+                            }
+
+                            // Extract genres
+                            let genres = '';
+                            if (details.genres && details.genres.length > 0) {
+                              genres = details.genres.map(g => g.name).join(', ');
+                            }
+
+                            // Update form with TMDB data
+                            setNewSubmission({
+                              masterTitle: movie.title,
+                              year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+                              director: director,
+                              studio: studio,
+                              genre: genres,
+                              variantFormat: 'VHS',
+                              variantRegion: '',
+                              variantRelease: '',
+                              variantPackaging: '',
+                              variantNotes: '',
+                              variantBarcode: '',
+                              imageCover: null,
+                              imageBack: null,
+                              imageSpine: null,
+                              imageTapeLabel: null
+                            });
+
+                            // Close dropdown and open modal
+                            setShowTmdbDropdown(false);
+                            setTmdbSearchResults([]);
+                            setSearchTerm('');
+                            setSubmitType('master');
+                            setShowSubmitModal(true);
+
+                            console.log('Modal should be open now');
+                          } catch (error) {
+                            console.error('Error fetching TMDB details:', error);
+                            alert('Error loading movie details. Please try again.');
+                          }
                         }}
                         className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                       >
