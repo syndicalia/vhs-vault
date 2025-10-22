@@ -29,6 +29,9 @@ export default function VHSCollectionTracker() {
   const [imageModalUrl, setImageModalUrl] = useState(null);
   const [editingVariant, setEditingVariant] = useState(null);
   const [editingMaster, setEditingMaster] = useState(null);
+  const [tmdbSearchResults, setTmdbSearchResults] = useState([]);
+  const [showTmdbDropdown, setShowTmdbDropdown] = useState(false);
+  const [tmdbSearchTimeout, setTmdbSearchTimeout] = useState(null);
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -65,6 +68,18 @@ export default function VHSCollectionTracker() {
       checkAdminStatus();
     }
   }, [user]);
+
+  useEffect(() => {
+    // Close TMDB dropdown when clicking outside
+    const handleClickOutside = (event) => {
+      if (showTmdbDropdown && !event.target.closest('.tmdb-search-container')) {
+        setShowTmdbDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showTmdbDropdown]);
 
   const checkAdminStatus = async () => {
     const { data, error } = await supabase.auth.getUser();
@@ -161,8 +176,9 @@ export default function VHSCollectionTracker() {
 
   const searchTMDB = async (title, year) => {
     try {
+      const yearParam = year ? `&year=${year}` : '';
       const response = await fetch(
-        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(title)}&year=${year}`
+        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(title)}${yearParam}`
       );
       const data = await response.json();
 
@@ -177,6 +193,49 @@ export default function VHSCollectionTracker() {
       console.error('TMDB search error:', error);
       return null;
     }
+  };
+
+  const handleTitleSearch = async (searchQuery) => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setTmdbSearchResults([]);
+      setShowTmdbDropdown(false);
+      return;
+    }
+
+    // Clear existing timeout
+    if (tmdbSearchTimeout) {
+      clearTimeout(tmdbSearchTimeout);
+    }
+
+    // Set new timeout for debouncing
+    const timeout = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}`
+        );
+        const data = await response.json();
+
+        if (data.results) {
+          setTmdbSearchResults(data.results.slice(0, 10)); // Limit to 10 results
+          setShowTmdbDropdown(true);
+        }
+      } catch (error) {
+        console.error('TMDB search error:', error);
+      }
+    }, 300); // 300ms debounce
+
+    setTmdbSearchTimeout(timeout);
+  };
+
+  const selectTmdbMovie = (movie) => {
+    setNewSubmission({
+      ...newSubmission,
+      masterTitle: movie.title,
+      year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+      genre: '', // We could map genre_ids to names if needed
+    });
+    setShowTmdbDropdown(false);
+    setTmdbSearchResults([]);
   };
 
   const handleAuth = async (e) => {
@@ -565,6 +624,7 @@ export default function VHSCollectionTracker() {
         } else {
           // Create new master
           const posterUrl = await searchTMDB(newSubmission.masterTitle, newSubmission.year);
+          console.log('TMDB poster URL fetched:', posterUrl);
 
           const { data: master, error: masterError } = await supabase
             .from('master_releases')
@@ -580,7 +640,11 @@ export default function VHSCollectionTracker() {
             .select()
             .single();
 
-          if (masterError) throw masterError;
+          if (masterError) {
+            console.error('Error creating master:', masterError);
+            throw masterError;
+          }
+          console.log('Master created:', master);
 
           const { data: variant, error: variantError } = await supabase
             .from('variants')
@@ -1417,15 +1481,54 @@ export default function VHSCollectionTracker() {
               <div className="space-y-4">
                 {submitType === 'master' && (
                   <>
-                    <div>
+                    <div className="relative tmdb-search-container">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
                       <input
                         type="text"
                         value={newSubmission.masterTitle}
-                        onChange={(e) => setNewSubmission({...newSubmission, masterTitle: e.target.value})}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setNewSubmission({...newSubmission, masterTitle: value});
+                          handleTitleSearch(value);
+                        }}
+                        onFocus={() => {
+                          if (tmdbSearchResults.length > 0) {
+                            setShowTmdbDropdown(true);
+                          }
+                        }}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="Enter movie title"
+                        placeholder="Search for movie on TMDB..."
+                        autoComplete="off"
                       />
+                      {showTmdbDropdown && tmdbSearchResults.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+                          {tmdbSearchResults.map((movie) => (
+                            <div
+                              key={movie.id}
+                              onClick={() => selectTmdbMovie(movie)}
+                              className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            >
+                              {movie.poster_path ? (
+                                <img
+                                  src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
+                                  alt={movie.title}
+                                  className="w-12 h-18 object-cover rounded mr-3"
+                                />
+                              ) : (
+                                <div className="w-12 h-18 bg-gray-200 rounded mr-3 flex items-center justify-center">
+                                  <Film className="w-6 h-6 text-gray-400" />
+                                </div>
+                              )}
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">{movie.title}</p>
+                                <p className="text-sm text-gray-500">
+                                  {movie.release_date ? movie.release_date.substring(0, 4) : 'N/A'}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
                       <div>
