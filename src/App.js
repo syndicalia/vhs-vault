@@ -45,7 +45,10 @@ export default function VHSCollectionTracker() {
     variantPackaging: '',
     variantNotes: '',
     variantBarcode: '',
-    imageFiles: []
+    imageCover: null,
+    imageBack: null,
+    imageSpine: null,
+    imageTapeLabel: null
   });
 
   useEffect(() => {
@@ -586,40 +589,43 @@ export default function VHSCollectionTracker() {
     }
   };
 
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    const currentCount = newSubmission.imageFiles.length;
-    const remaining = 5 - currentCount;
+  const handleImageUpload = (e, imageType) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    if (files.length > remaining) {
-      alert(`You can only upload ${remaining} more image(s). Maximum is 5 images per variant.`);
-      return;
-    }
-
-    const filesWithPreviews = files.map(file => ({
+    const fileWithPreview = {
       file,
       preview: URL.createObjectURL(file)
-    }));
+    };
 
     setNewSubmission({
       ...newSubmission,
-      imageFiles: [...newSubmission.imageFiles, ...filesWithPreviews]
+      [imageType]: fileWithPreview
     });
   };
 
-  const removeImage = (index) => {
-    const newFiles = [...newSubmission.imageFiles];
-    URL.revokeObjectURL(newFiles[index].preview);
-    newFiles.splice(index, 1);
-    setNewSubmission({ ...newSubmission, imageFiles: newFiles });
+  const removeImage = (imageType) => {
+    if (newSubmission[imageType]) {
+      URL.revokeObjectURL(newSubmission[imageType].preview);
+      setNewSubmission({ ...newSubmission, [imageType]: null });
+    }
   };
 
   const uploadImages = async (variantId) => {
-    for (let i = 0; i < newSubmission.imageFiles.length; i++) {
-      const fileObj = newSubmission.imageFiles[i];
+    const imageTypes = [
+      { key: 'imageCover', order: 0, label: 'Cover' },
+      { key: 'imageBack', order: 1, label: 'Back' },
+      { key: 'imageSpine', order: 2, label: 'Spine' },
+      { key: 'imageTapeLabel', order: 3, label: 'Tape Label' }
+    ];
+
+    for (const imageType of imageTypes) {
+      const fileObj = newSubmission[imageType.key];
+      if (!fileObj) continue; // Skip if no image uploaded for this type
+
       const file = fileObj.file;
       const fileExt = file.name.split('.').pop();
-      const fileName = `${variantId}-${Date.now()}-${i}.${fileExt}`;
+      const fileName = `${variantId}-${imageType.label.toLowerCase().replace(' ', '-')}-${Date.now()}.${fileExt}`;
 
       const { error } = await supabase.storage
         .from('variant-images')
@@ -631,7 +637,7 @@ export default function VHSCollectionTracker() {
         await supabase.from('variant_images').insert([{
           variant_id: variantId,
           image_url: data.publicUrl,
-          image_order: i
+          image_order: imageType.order
         }]);
       }
     }
@@ -737,7 +743,9 @@ export default function VHSCollectionTracker() {
           if (error) throw error;
 
           // Upload any new images
-          if (newSubmission.imageFiles.length > 0) {
+          const hasNewImages = newSubmission.imageCover || newSubmission.imageBack ||
+                               newSubmission.imageSpine || newSubmission.imageTapeLabel;
+          if (hasNewImages) {
             await uploadImages(editingVariant.id);
           }
 
@@ -772,7 +780,8 @@ export default function VHSCollectionTracker() {
       setNewSubmission({
         masterTitle: '', year: '', director: '', studio: '', genre: '',
         variantFormat: 'VHS', variantRegion: '', variantRelease: '',
-        variantPackaging: '', variantNotes: '', variantBarcode: '', imageFiles: []
+        variantPackaging: '', variantNotes: '', variantBarcode: '',
+        imageCover: null, imageBack: null, imageSpine: null, imageTapeLabel: null
       });
 
       loadAllData();
@@ -1191,7 +1200,10 @@ export default function VHSCollectionTracker() {
                                       variantPackaging: variant.packaging,
                                       variantNotes: variant.notes || '',
                                       variantBarcode: variant.barcode || '',
-                                      imageFiles: []
+                                      imageCover: null,
+                                      imageBack: null,
+                                      imageSpine: null,
+                                      imageTapeLabel: null
                                     });
                                     setShowSubmitModal(true);
                                     setSubmitType('variant');
@@ -1765,58 +1777,150 @@ export default function VHSCollectionTracker() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Upload Images (Max 5)
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Upload Images
                       </label>
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                        <input
-                          type="file"
-                          multiple
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          className="hidden"
-                          id="image-upload"
-                          disabled={newSubmission.imageFiles.length >= 5}
-                        />
-                        <label
-                          htmlFor="image-upload"
-                          className={`cursor-pointer ${newSubmission.imageFiles.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          <Upload className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                          <p className="text-gray-600">
-                            {newSubmission.imageFiles.length >= 5
-                              ? 'Maximum 5 images reached'
-                              : 'Click to upload images'
-                            }
-                          </p>
-                          <p className="text-sm text-gray-500 mt-1">
-                            {newSubmission.imageFiles.length}/5 images • Front, back, spine, special features
-                          </p>
-                        </label>
-                      </div>
-                      {newSubmission.imageFiles.length > 0 && (
-                        <div className="mt-4 grid grid-cols-5 gap-2">
-                          {newSubmission.imageFiles.map((fileObj, idx) => (
-                            <div key={idx} className="relative group">
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Cover Image */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Cover</label>
+                          {newSubmission.imageCover ? (
+                            <div className="relative">
                               <img
-                                src={fileObj.preview}
-                                alt={`Preview ${idx + 1}`}
-                                className="w-full h-24 object-cover rounded border-2 border-gray-300"
+                                src={newSubmission.imageCover.preview}
+                                alt="Cover preview"
+                                className="w-full h-32 object-cover rounded border-2 border-gray-300"
                               />
                               <button
                                 type="button"
-                                onClick={() => removeImage(idx)}
+                                onClick={() => removeImage('imageCover')}
                                 className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
                               >
                                 <X className="w-3 h-3" />
                               </button>
-                              <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs text-center py-1 rounded-b">
-                                Image {idx + 1}
-                              </div>
                             </div>
-                          ))}
+                          ) : (
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 transition">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'imageCover')}
+                                className="hidden"
+                                id="image-cover"
+                              />
+                              <label htmlFor="image-cover" className="cursor-pointer">
+                                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+                                <p className="text-xs text-gray-500">Click to upload</p>
+                              </label>
+                            </div>
+                          )}
                         </div>
-                      )}
+
+                        {/* Back Image */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Back</label>
+                          {newSubmission.imageBack ? (
+                            <div className="relative">
+                              <img
+                                src={newSubmission.imageBack.preview}
+                                alt="Back preview"
+                                className="w-full h-32 object-cover rounded border-2 border-gray-300"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage('imageBack')}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 transition">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'imageBack')}
+                                className="hidden"
+                                id="image-back"
+                              />
+                              <label htmlFor="image-back" className="cursor-pointer">
+                                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+                                <p className="text-xs text-gray-500">Click to upload</p>
+                              </label>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Spine Image */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Spine</label>
+                          {newSubmission.imageSpine ? (
+                            <div className="relative">
+                              <img
+                                src={newSubmission.imageSpine.preview}
+                                alt="Spine preview"
+                                className="w-full h-32 object-cover rounded border-2 border-gray-300"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage('imageSpine')}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 transition">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'imageSpine')}
+                                className="hidden"
+                                id="image-spine"
+                              />
+                              <label htmlFor="image-spine" className="cursor-pointer">
+                                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+                                <p className="text-xs text-gray-500">Click to upload</p>
+                              </label>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Tape Label Image */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Tape Label</label>
+                          {newSubmission.imageTapeLabel ? (
+                            <div className="relative">
+                              <img
+                                src={newSubmission.imageTapeLabel.preview}
+                                alt="Tape Label preview"
+                                className="w-full h-32 object-cover rounded border-2 border-gray-300"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage('imageTapeLabel')}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 transition">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'imageTapeLabel')}
+                                className="hidden"
+                                id="image-tape-label"
+                              />
+                              <label htmlFor="image-tape-label" className="cursor-pointer">
+                                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+                                <p className="text-xs text-gray-500">Click to upload</p>
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                   </div>
