@@ -1930,8 +1930,7 @@ const selectTMDBMovie = async (movie) => {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+       </div>
   </div>
 );
 }
@@ -1957,4 +1956,8 @@ const selectTMDBMovie = async (movie) => {
         </div>
       )}</div>
   );
+}
+)}
+  </div>  // <-- This closes the main <div className="min-h-screen bg-gray-50">
+);
 }
