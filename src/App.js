@@ -17,7 +17,10 @@ export default function VHSCollectionTracker() {
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [marketplace, setMarketplace] = useState([]);
   const [userVotes, setUserVotes] = useState({});
-
+  const [tmdbSearchResults, setTmdbSearchResults] = useState([]);
+  const [tmdbSearchTerm, setTmdbSearchTerm] = useState('');
+  const [isSearchingTMDB, setIsSearchingTMDB] = useState(false);
+  const [showTMDBModal, setShowTMDBModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMaster, setSelectedMaster] = useState(null);
   const [view, setView] = useState('browse');
@@ -44,19 +47,20 @@ const packagingOptions = [
   'Other'
 ];
   const [newSubmission, setNewSubmission] = useState({
-    masterTitle: '',
-    year: '',
-    director: '',
-    studio: '',
-    genre: '',
-    variantFormat: 'VHS',
-    variantRegion: '',
-    variantRelease: '',
-    variantPackaging: '',
-    variantNotes: '',
-    variantBarcode: '',
-    imageFiles: []
-  });
+  masterTitle: '',
+  year: '',
+  director: '',
+  studio: '',
+  genre: '',
+  posterUrl: '',  // Add this
+  variantFormat: 'VHS',
+  variantRegion: '',
+  variantRelease: '',
+  variantPackaging: '',
+  variantNotes: '',
+  variantBarcode: '',
+  imageFiles: []
+});
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -491,7 +495,8 @@ const updateMasterRelease = async () => {
         year: parseInt(editingMaster.year),
         director: editingMaster.director,
         studio: editingMaster.studio,
-        genre: editingMaster.genre
+        genre: editingMaster.genre,
+        poster_url: editingMaster.poster_url || null  // Add this
       })
       .eq('id', editingMaster.id);
     
@@ -559,15 +564,16 @@ const updateMasterRelease = async () => {
     try {
       if (submitType === 'master') {
         const { data: master, error: masterError } = await supabase
-          .from('master_releases')
-          .insert([{
-            title: newSubmission.masterTitle,
-            year: parseInt(newSubmission.year),
-            director: newSubmission.director,
-            studio: newSubmission.studio,
-            genre: newSubmission.genre,
-            created_by: user.id
-          }])
+  .from('master_releases')
+  .insert([{
+    title: newSubmission.masterTitle,
+    year: parseInt(newSubmission.year),
+    director: newSubmission.director,
+    studio: newSubmission.studio,
+    genre: newSubmission.genre,
+    poster_url: newSubmission.posterUrl || null,  // Add this
+    created_by: user.id
+  }])
           .select()
           .single();
 
@@ -617,10 +623,10 @@ const updateMasterRelease = async () => {
       alert('Submission sent for review!');
       setShowSubmitModal(false);
       setNewSubmission({
-        masterTitle: '', year: '', director: '', studio: '', genre: '',
-        variantFormat: 'VHS', variantRegion: '', variantRelease: '',
-        variantPackaging: '', variantNotes: '', variantBarcode: '', imageFiles: []
-      });
+  masterTitle: '', year: '', director: '', studio: '', genre: '', posterUrl: '',  // Add posterUrl
+  variantFormat: 'VHS', variantRegion: '', variantRelease: '',
+  variantPackaging: '', variantNotes: '', variantBarcode: '', imageFiles: []
+});
 
       loadAllData();
     } catch (error) {
@@ -634,13 +640,70 @@ const updateMasterRelease = async () => {
   );
 
   const getCollectionItems = () => {
-    return collection.map(item => {
-      const master = masterReleases.find(m => m.id === item.master_id);
-      const variant = master?.variants?.find(v => v.id === item.variant_id);
-      return { master, variant };
-    }).filter(item => item.master && item.variant);
-  };
+  return collection.map(item => {
+    const master = masterReleases.find(m => m.id === item.master_id);
+    const variant = master?.variants?.find(v => v.id === item.variant_id);
+    return { master, variant };
+  }).filter(item => item.master && item.variant);
+};
+const searchTMDB = async (query) => {
+  if (!query.trim()) return;
+  
+  setIsSearchingTMDB(true);
+  try {
+    const response = await fetch(
+      `https://api.themoviedb.org/3/search/movie?api_key=${process.env.REACT_APP_TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=en-US&page=1&include_adult=false`
+    );
+    const data = await response.json();
+    setTmdbSearchResults(data.results || []);
+  } catch (error) {
+    console.error('TMDB search error:', error);
+    alert('Error searching TMDB: ' + error.message);
+  }
+  setIsSearchingTMDB(false);
+};
 
+const selectTMDBMovie = async (movie) => {
+  try {
+    // Get full movie details including credits
+    const response = await fetch(
+      `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${process.env.REACT_APP_TMDB_API_KEY}&append_to_response=credits`
+    );
+    const details = await response.json();
+    
+    // Get director from credits
+    const director = details.credits?.crew?.find(person => person.job === 'Director');
+    
+    // Get primary genre
+    const genre = details.genres?.[0]?.name || '';
+    
+    // Get production company
+    const studio = details.production_companies?.[0]?.name || '';
+    
+    // Get poster (full size)
+    const posterUrl = details.poster_path 
+      ? `https://image.tmdb.org/t/p/w500${details.poster_path}`
+      : '';
+    
+    // Pre-fill the form
+    setNewSubmission({
+      ...newSubmission,
+      masterTitle: details.title || movie.title,
+      year: details.release_date ? details.release_date.split('-')[0] : '',
+      director: director?.name || '',
+      studio: studio,
+      genre: genre,
+      posterUrl: posterUrl
+    });
+    
+    setShowTMDBModal(false);
+    setShowSubmitModal(true);
+    setSubmitType('master');
+  } catch (error) {
+    console.error('Error fetching movie details:', error);
+    alert('Error loading movie details: ' + error.message);
+  }
+};
   const getWishlistItems = () => {
     return wishlist.map(item => {
       const master = masterReleases.find(m => m.id === item.master_id);
@@ -769,12 +832,12 @@ const updateMasterRelease = async () => {
                 />
               </div>
               <button
-                onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
-                className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add New Title</span>
-              </button>
+  onClick={() => setShowTMDBModal(true)}
+  className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
+>
+  <Plus className="w-5 h-5" />
+  <span>Add New Title</span>
+</button>
             </div>
 
             {!selectedMaster ? (
@@ -799,7 +862,15 @@ const updateMasterRelease = async () => {
                           <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
                         </div>
                       </div>
-                      <div className="text-2xl">🎬</div>
+                      {master.poster_url ? (
+  <img 
+    src={master.poster_url} 
+    alt={master.title}
+    className="w-20 h-28 object-cover rounded shadow-md"
+  />
+) : (
+  <div className="text-2xl">🎬</div>
+)}
                     </div>
                   </div>
                 ))}
@@ -858,7 +929,19 @@ const updateMasterRelease = async () => {
                       </div>
                     </div>
                     <div className="flex flex-col space-y-2">
-  <div className="text-4xl">🎬</div>
+  <div className="flex flex-col items-center space-y-2">
+  {selectedMaster.poster_url ? (
+    <img 
+      src={selectedMaster.poster_url} 
+      alt={selectedMaster.title}
+      className="w-40 h-56 object-cover rounded shadow-lg cursor-pointer hover:opacity-90 transition"
+      onClick={() => setLightboxImage(selectedMaster.poster_url)}
+    />
+  ) : (
+    <div className="text-4xl">🎬</div>
+  )}
+  {/* ... admin buttons ... */}
+</div>
   {isAdmin && (
     <>
       <button
@@ -1013,48 +1096,70 @@ const updateMasterRelease = async () => {
         )}
 
         {view === 'collection' && (
-          <>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">My Collection</h2>
-            {collection.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-12 text-center">
-                <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">Your collection is empty</p>
-                <p className="text-gray-500 mt-2">Browse the database to add tapes</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {getCollectionItems().map((item, idx) => (
-                  <div key={idx} className="bg-white rounded-lg shadow p-6">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-800 mb-2">{item.master.title}</h3>
-                        <p className="text-gray-600 mb-3">{item.master.director} • {item.master.year}</p>
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
-                            {item.variant.format}
-                          </span>
-                          <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
-                            {item.variant.region}
-                          </span>
+  <>
+    <h2 className="text-2xl font-bold text-gray-800 mb-6">My Collection</h2>
+    {collection.length === 0 ? (
+      <div className="bg-white rounded-lg shadow p-12 text-center">
+        <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <p className="text-gray-600 text-lg">Your collection is empty</p>
+        <p className="text-gray-500 mt-2">Browse the database to add tapes</p>
+      </div>
+    ) : (
+      <div className="grid gap-4">
+        {getCollectionItems().map((item, idx) => (
+          <div key={idx} className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-gray-800 mb-2">{item.master.title}</h3>
+                <p className="text-gray-600 mb-3">{item.master.director} • {item.master.year}</p>
+                <div className="flex items-center space-x-2 mb-2">
+                  <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                    {item.variant.format}
+                  </span>
+                  <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                    {item.variant.region}
+                  </span>
+                </div>
+                <p className="text-gray-700 text-sm mb-3">
+                  {item.variant.release_year} • {item.variant.packaging}
+                </p>
+                
+                {/* Add images here */}
+                {item.variant.variant_images && item.variant.variant_images.length > 0 && (
+                  <div className="mt-3">
+                    <div className="flex items-center space-x-2 overflow-x-auto">
+                      {item.variant.variant_images.slice(0, 4).map((img, imgIdx) => (
+                        <img
+                          key={imgIdx}
+                          src={img.image_url}
+                          alt={`Variant ${imgIdx + 1}`}
+                          className="w-16 h-16 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                          onClick={() => setLightboxImage(img.image_url)}
+                        />
+                      ))}
+                      {item.variant.variant_images.length > 4 && (
+                        <div className="w-16 h-16 bg-gray-200 rounded border-2 border-gray-300 flex items-center justify-center text-gray-600 text-sm font-medium">
+                          +{item.variant.variant_images.length - 4}
                         </div>
-                        <p className="text-gray-700 text-sm">
-                          {item.variant.release_year} • {item.variant.packaging}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => removeFromCollection(item.variant.id)}
-                        className="ml-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center space-x-2"
-                      >
-                        <X className="w-4 h-4" />
-                        <span>Remove</span>
-                      </button>
+                      )}
                     </div>
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </>
-        )}
+              <button
+                onClick={() => removeFromCollection(item.variant.id)}
+                className="ml-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center space-x-2"
+              >
+                <X className="w-4 h-4" />
+                <span>Remove</span>
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </>
+)}
 
         {view === 'wishlist' && (
           <>
@@ -1288,7 +1393,86 @@ const updateMasterRelease = async () => {
           </>
         )}
       </div>
+{showTMDBModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-800">Search TMDB</h2>
+          <button
+            onClick={() => setShowTMDBModal(false)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
 
+        <div className="mb-6">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={tmdbSearchTerm}
+              onChange={(e) => setTmdbSearchTerm(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && searchTMDB(tmdbSearchTerm)}
+              placeholder="Search for a movie..."
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <button
+              onClick={() => searchTMDB(tmdbSearchTerm)}
+              disabled={isSearchingTMDB}
+              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+            >
+              {isSearchingTMDB ? 'Searching...' : 'Search'}
+            </button>
+          </div>
+        </div>
+<div className="mb-4">
+  <button
+    onClick={() => {
+      setShowTMDBModal(false);
+      setShowSubmitModal(true);
+      setSubmitType('master');
+    }}
+    className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+  >
+    Or click here to enter details manually →
+  </button>
+</div>
+        <div className="space-y-3">
+          {tmdbSearchResults.length === 0 && !isSearchingTMDB && (
+            <p className="text-gray-500 text-center py-8">Search for a movie to get started</p>
+          )}
+          {tmdbSearchResults.map(movie => (
+            <div
+              key={movie.id}
+              className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition"
+              onClick={() => selectTMDBMovie(movie)}
+            >
+              {movie.poster_path ? (
+                <img
+                  src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
+                  alt={movie.title}
+                  className="w-16 h-24 object-cover rounded shadow"
+                />
+              ) : (
+                <div className="w-16 h-24 bg-gray-200 rounded flex items-center justify-center">
+                  <Film className="w-8 h-8 text-gray-400" />
+                </div>
+              )}
+              <div className="flex-1">
+                <h3 className="font-bold text-gray-800">{movie.title}</h3>
+                <p className="text-sm text-gray-600">
+                  {movie.release_date ? new Date(movie.release_date).getFullYear() : 'N/A'}
+                </p>
+                <p className="text-sm text-gray-500 mt-1 line-clamp-2">{movie.overview}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
       {showSubmitModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -1660,6 +1844,23 @@ const updateMasterRelease = async () => {
               onChange={(e) => setEditingMaster({...editingMaster, title: e.target.value})}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               placeholder="Enter movie title"
+		  <div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">Poster URL (optional)</label>
+  <input
+    type="text"
+    value={editingMaster.poster_url || ''}
+    onChange={(e) => setEditingMaster({...editingMaster, poster_url: e.target.value})}
+    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+    placeholder="https://..."
+  />
+  {editingMaster.poster_url && (
+    <img 
+      src={editingMaster.poster_url} 
+      alt="Poster preview"
+      className="mt-2 w-32 h-48 object-cover rounded border"
+    />
+  )}
+</div>
             />
           </div>
           <div className="grid md:grid-cols-2 gap-4">
