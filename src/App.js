@@ -1234,7 +1234,42 @@ export default function VHSCollectionTracker() {
               <div className="grid gap-4">
                 {getCollectionItems().map((item, idx) => (
                   <div key={idx} className="bg-white rounded-lg shadow p-6">
-                    <div className="flex justify-between items-start">
+                    <div className="flex gap-4 items-start">
+                      {/* Variant Images - Left Side */}
+                      {item.variant.variant_images && item.variant.variant_images.length > 0 ? (
+                        <div className="flex-shrink-0">
+                          <img
+                            src={item.variant.variant_images[0].image_url}
+                            alt="Variant cover"
+                            className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
+                            onClick={() => setImageModalUrl(item.variant.variant_images[0].image_url)}
+                          />
+                          {item.variant.variant_images.length > 1 && (
+                            <div className="flex mt-2 space-x-1">
+                              {item.variant.variant_images.slice(1, 4).map((img, imgIdx) => (
+                                <img
+                                  key={imgIdx}
+                                  src={img.image_url}
+                                  alt={`Variant ${imgIdx + 2}`}
+                                  className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                  onClick={() => setImageModalUrl(img.image_url)}
+                                />
+                              ))}
+                              {item.variant.variant_images.length > 4 && (
+                                <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                  +{item.variant.variant_images.length - 4}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                          <Film className="w-16 h-16 text-purple-400" />
+                        </div>
+                      )}
+
+                      {/* Variant Info - Center */}
                       <div className="flex-1">
                         <h3 className="text-xl font-bold text-gray-800 mb-2">{item.master.title}</h3>
                         <p className="text-gray-600 mb-3">{item.master.director} • {item.master.year}</p>
@@ -1249,31 +1284,12 @@ export default function VHSCollectionTracker() {
                         <p className="text-gray-700 text-sm">
                           {item.variant.release_year} • {item.variant.packaging}
                         </p>
-
-                        {item.variant.variant_images && item.variant.variant_images.length > 0 && (
-                          <div className="mt-3">
-                            <div className="flex items-center space-x-2 overflow-x-auto">
-                              {item.variant.variant_images.slice(0, 4).map((img, imgIdx) => (
-                                <img
-                                  key={imgIdx}
-                                  src={img.image_url}
-                                  alt={`Variant ${imgIdx + 1}`}
-                                  className="w-16 h-16 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                  onClick={() => setImageModalUrl(img.image_url)}
-                                />
-                              ))}
-                              {item.variant.variant_images.length > 4 && (
-                                <div className="w-16 h-16 bg-gray-200 rounded border-2 border-gray-300 flex items-center justify-center text-gray-600 text-sm font-medium">
-                                  +{item.variant.variant_images.length - 4}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
                       </div>
+
+                      {/* Remove Button - Right Side */}
                       <button
                         onClick={() => removeFromCollection(item.variant.id)}
-                        className="ml-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center space-x-2"
+                        className="flex-shrink-0 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center space-x-2"
                       >
                         <X className="w-4 h-4" />
                         <span>Remove</span>
