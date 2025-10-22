@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle } from 'lucide-react';
+import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2 } from 'lucide-react';
 
 const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -27,6 +27,8 @@ export default function VHSCollectionTracker() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitType, setSubmitType] = useState('variant');
   const [imageModalUrl, setImageModalUrl] = useState(null);
+  const [editingVariant, setEditingVariant] = useState(null);
+  const [editingMaster, setEditingMaster] = useState(null);
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -403,6 +405,89 @@ export default function VHSCollectionTracker() {
     }
   };
 
+  const deleteVariant = async (variantId) => {
+    if (!window.confirm('Are you sure you want to delete this variant? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      // Delete variant images from storage
+      const { data: images } = await supabase
+        .from('variant_images')
+        .select('image_url')
+        .eq('variant_id', variantId);
+
+      if (images) {
+        for (const img of images) {
+          const fileName = img.image_url.split('/').pop();
+          await supabase.storage
+            .from('variant-images')
+            .remove([fileName]);
+        }
+      }
+
+      // Delete the variant
+      const { error } = await supabase
+        .from('variants')
+        .delete()
+        .eq('id', variantId);
+
+      if (error) throw error;
+
+      alert('Variant deleted successfully.');
+      await loadAllData();
+    } catch (error) {
+      alert('Error deleting variant: ' + error.message);
+    }
+  };
+
+  const deleteMasterRelease = async (masterId) => {
+    if (!window.confirm('Are you sure you want to delete this master release? This will also delete all associated variants and cannot be undone.')) {
+      return;
+    }
+
+    try {
+      // Get all variants for this master
+      const { data: variants } = await supabase
+        .from('variants')
+        .select('id')
+        .eq('master_id', masterId);
+
+      // Delete all variant images
+      if (variants && variants.length > 0) {
+        for (const variant of variants) {
+          const { data: images } = await supabase
+            .from('variant_images')
+            .select('image_url')
+            .eq('variant_id', variant.id);
+
+          if (images) {
+            for (const img of images) {
+              const fileName = img.image_url.split('/').pop();
+              await supabase.storage
+                .from('variant-images')
+                .remove([fileName]);
+            }
+          }
+        }
+      }
+
+      // Delete the master release (cascade will delete variants)
+      const { error } = await supabase
+        .from('master_releases')
+        .delete()
+        .eq('id', masterId);
+
+      if (error) throw error;
+
+      alert('Master release and all variants deleted successfully.');
+      setSelectedMaster(null);
+      await loadAllData();
+    } catch (error) {
+      alert('Error deleting master release: ' + error.message);
+    }
+  };
+
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     const currentCount = newSubmission.imageFiles.length;
@@ -726,12 +811,23 @@ export default function VHSCollectionTracker() {
               </div>
             ) : (
               <div>
-                <button
-                  onClick={() => setSelectedMaster(null)}
-                  className="mb-4 text-purple-600 hover:text-purple-700 font-medium"
-                >
-                  ← Back to list
-                </button>
+                <div className="flex justify-between items-center mb-4">
+                  <button
+                    onClick={() => setSelectedMaster(null)}
+                    className="text-purple-600 hover:text-purple-700 font-medium"
+                  >
+                    ← Back to list
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => deleteMasterRelease(selectedMaster.id)}
+                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center space-x-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete Master</span>
+                    </button>
+                  </div>
+                </div>
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                   <div className="flex gap-6 mb-4">
                     {selectedMaster.poster_url ? (
@@ -879,6 +975,13 @@ export default function VHSCollectionTracker() {
                               }`}
                             >
                               <Heart className={`w-4 h-4 ${inWish ? 'fill-current' : ''}`} />
+                            </button>
+                            <button
+                              onClick={() => deleteVariant(variant.id)}
+                              className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
+                              title="Delete variant"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
