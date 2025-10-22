@@ -1011,6 +1011,13 @@ export default function VHSCollectionTracker() {
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
+              <button
+                onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add New Title</span>
+              </button>
             </div>
 
             {selectedVariant ? (
