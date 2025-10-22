@@ -1836,32 +1836,34 @@ const selectTMDBMovie = async (movie) => {
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
-            <input
-              type="text"
-              value={editingMaster.title}
-              onChange={(e) => setEditingMaster({...editingMaster, title: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Enter movie title"
-        </div>
-			  
-  <label className="block text-sm font-medium text-gray-700 mb-2">Poster URL (optional)</label>
-  <input
-    type="text"
-    value={editingMaster.poster_url || ''}
-    onChange={(e) => setEditingMaster({...editingMaster, poster_url: e.target.value})}
-    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-    placeholder="https://..."
-  />
-  {editingMaster.poster_url && (
-    <img 
-      src={editingMaster.poster_url} 
-      alt="Poster preview"
-      className="mt-2 w-32 h-48 object-cover rounded border"
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+    <input
+      type="text"
+      value={editingMaster.title}
+      onChange={(e) => setEditingMaster({...editingMaster, title: e.target.value})}
+      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+      placeholder="Enter movie title"
     />
-  )}
-</div>
+  </div>
+  
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">Poster URL (optional)</label>
+    <input
+      type="text"
+      value={editingMaster.poster_url || ''}
+      onChange={(e) => setEditingMaster({...editingMaster, poster_url: e.target.value})}
+      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+      placeholder="https://..."
+    />
+    {editingMaster.poster_url && (
+      <img 
+        src={editingMaster.poster_url} 
+        alt="Poster preview"
+        className="mt-2 w-32 h-48 object-cover rounded border"
+      />
+    )}
+  </div>
             />
           </div>
           <div className="grid md:grid-cols-2 gap-4">
