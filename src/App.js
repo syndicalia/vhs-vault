@@ -25,7 +25,23 @@ export default function VHSCollectionTracker() {
   const [submitType, setSubmitType] = useState('variant');
   const [lightboxImage, setLightboxImage] = useState(null);
   const [editingVariant, setEditingVariant] = useState(null);
-  
+  const regionOptions = [
+  'NTSC (USA/Canada)',
+  'NTSC (Japan)',
+  'PAL (UK/Europe)',
+  'PAL (Australia)',
+  'SECAM (France/Russia)',
+  'Other'
+];
+
+const packagingOptions = [
+  'Clamshell',
+  'Slipcover',
+  'Cardboard Sleeve',
+  'Plastic Case',
+  'Big Box',
+  'Other'
+];
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
     year: '',
