@@ -1085,12 +1085,17 @@ export default function VHSCollectionTracker() {
                     {tmdbSearchResults.map((movie) => (
                       <div
                         key={movie.id}
-                        onClick={async () => {
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          console.log('Movie clicked:', movie.title);
+
                           // Auto-fill the form with TMDB data and open submit modal
                           await selectTmdbMovie(movie);
+
+                          console.log('Opening modal...');
                           setSearchTerm('');
-                          setShowSubmitModal(true);
                           setSubmitType('master');
+                          setShowSubmitModal(true);
                         }}
                         className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                       >
