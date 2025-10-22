@@ -1084,7 +1084,42 @@ export default function VHSCollectionTracker() {
                     const inWish = isInWishlist(variant.id);
                     return (
                       <div key={variant.id} className="bg-white rounded-lg shadow p-6">
-                        <div className="flex justify-between items-start">
+                        <div className="flex gap-4 items-start">
+                          {/* Variant Images - Left Side */}
+                          {variant.variant_images && variant.variant_images.length > 0 ? (
+                            <div className="flex-shrink-0">
+                              <img
+                                src={variant.variant_images[0].image_url}
+                                alt="Variant cover"
+                                className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
+                                onClick={() => setImageModalUrl(variant.variant_images[0].image_url)}
+                              />
+                              {variant.variant_images.length > 1 && (
+                                <div className="flex mt-2 space-x-1">
+                                  {variant.variant_images.slice(1, 4).map((img, idx) => (
+                                    <img
+                                      key={idx}
+                                      src={img.image_url}
+                                      alt={`Variant ${idx + 2}`}
+                                      className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                      onClick={() => setImageModalUrl(img.image_url)}
+                                    />
+                                  ))}
+                                  {variant.variant_images.length > 4 && (
+                                    <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                      +{variant.variant_images.length - 4}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                              <Film className="w-16 h-16 text-purple-400" />
+                            </div>
+                          )}
+
+                          {/* Variant Info - Center */}
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-2">
                               <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
@@ -1113,29 +1148,10 @@ export default function VHSCollectionTracker() {
                             <p className="text-xs text-gray-500 mt-2">
                               {variant.votes_up || 0} 👍 {variant.votes_down || 0} 👎
                             </p>
-
-                            {variant.variant_images && variant.variant_images.length > 0 && (
-                              <div className="mt-3">
-                                <div className="flex items-center space-x-2 overflow-x-auto">
-                                  {variant.variant_images.slice(0, 4).map((img, idx) => (
-                                    <img
-                                      key={idx}
-                                      src={img.image_url}
-                                      alt={`Variant ${idx + 1}`}
-                                      className="w-16 h-16 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                      onClick={() => setImageModalUrl(img.image_url)}
-                                    />
-                                  ))}
-                                  {variant.variant_images.length > 4 && (
-                                    <div className="w-16 h-16 bg-gray-200 rounded border-2 border-gray-300 flex items-center justify-center text-gray-600 text-sm font-medium">
-                                      +{variant.variant_images.length - 4}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
                           </div>
-                          <div className="ml-4 flex flex-col space-y-2">
+
+                          {/* Action Buttons - Right Side */}
+                          <div className="flex flex-col space-y-2 flex-shrink-0">
                             <button
                               onClick={() => {
                                 if (inColl) {
