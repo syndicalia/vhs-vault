@@ -1477,67 +1477,87 @@ export default function VHSCollectionTracker() {
                         )}
                       </div>
 
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">
+                      <h3 className="text-xl font-bold text-gray-800 mb-4">
                         New Variant for: {submission.master_releases.title}
                       </h3>
 
-                      <div className="grid md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Format</p>
-                          <p className="text-gray-600">{submission.format}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Region</p>
-                          <p className="text-gray-600">{submission.region}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Release Year</p>
-                          <p className="text-gray-600">{submission.release_year}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-700 mb-1">Packaging</p>
-                          <p className="text-gray-600">{submission.packaging}</p>
-                        </div>
-                        {submission.barcode && (
-                          <div className="md:col-span-2">
-                            <p className="text-sm font-semibold text-gray-700 mb-1">Barcode</p>
-                            <p className="text-gray-600">{submission.barcode}</p>
+                      <div className="flex gap-4 items-start">
+                        {/* Variant Images - Left Side */}
+                        {submission.variant_images && submission.variant_images.length > 0 ? (
+                          <div className="flex-shrink-0">
+                            <img
+                              src={submission.variant_images[0].image_url}
+                              alt="Variant cover"
+                              className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
+                              onClick={() => setImageModalUrl(submission.variant_images[0].image_url)}
+                            />
+                            {submission.variant_images.length > 1 && (
+                              <div className="flex mt-2 space-x-1">
+                                {submission.variant_images.slice(1, 4).map((img, idx) => (
+                                  <img
+                                    key={idx}
+                                    src={img.image_url}
+                                    alt={`Variant ${idx + 2}`}
+                                    className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                    onClick={() => setImageModalUrl(img.image_url)}
+                                  />
+                                ))}
+                                {submission.variant_images.length > 4 && (
+                                  <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                    +{submission.variant_images.length - 4}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                            <Film className="w-16 h-16 text-purple-400" />
                           </div>
                         )}
-                        {submission.notes && (
-                          <div className="md:col-span-2">
-                            <p className="text-sm font-semibold text-gray-700 mb-1">Notes</p>
-                            <p className="text-gray-600 italic">{submission.notes}</p>
+
+                        {/* Variant Info - Center/Right */}
+                        <div className="flex-1">
+                          <div className="grid md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <p className="text-sm font-semibold text-gray-700 mb-1">Format</p>
+                              <p className="text-gray-600">{submission.format}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-700 mb-1">Region</p>
+                              <p className="text-gray-600">{submission.region}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-700 mb-1">Release Year</p>
+                              <p className="text-gray-600">{submission.release_year}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-700 mb-1">Packaging</p>
+                              <p className="text-gray-600">{submission.packaging}</p>
+                            </div>
+                            {submission.barcode && (
+                              <div className="md:col-span-2">
+                                <p className="text-sm font-semibold text-gray-700 mb-1">Barcode</p>
+                                <p className="text-gray-600">{submission.barcode}</p>
+                              </div>
+                            )}
+                            {submission.notes && (
+                              <div className="md:col-span-2">
+                                <p className="text-sm font-semibold text-gray-700 mb-1">Notes</p>
+                                <p className="text-gray-600 italic">{submission.notes}</p>
+                              </div>
+                            )}
                           </div>
-                        )}
+
+                          {!isAdmin && (
+                            <div className="pt-4 border-t">
+                              <p className="text-xs text-gray-500">
+                                Community votes: {submission.votes_up || 0} 👍 {submission.votes_down || 0} 👎
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
-
-                      {submission.variant_images && submission.variant_images.length > 0 && (
-                        <div className="mt-4">
-                          <p className="text-sm font-semibold text-gray-700 mb-2">
-                            Images ({submission.variant_images.length})
-                          </p>
-                          <div className="grid grid-cols-5 gap-2">
-                            {submission.variant_images.map((img, idx) => (
-                              <img
-                                key={idx}
-                                src={img.image_url}
-                                alt={`Submission image ${idx + 1}`}
-                                className="w-full h-24 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                onClick={() => setImageModalUrl(img.image_url)}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {!isAdmin && (
-                        <div className="mt-4 pt-4 border-t">
-                          <p className="text-xs text-gray-500">
-                            Community votes: {submission.votes_up || 0} 👍 {submission.votes_down || 0} 👎
-                          </p>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
