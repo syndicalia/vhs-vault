@@ -342,22 +342,30 @@ export default function VHSCollectionTracker() {
   }
   
   try {
-    // Just delete the variant - images will cascade delete automatically
+    // Delete variant_images first manually
+    await supabase
+      .from('variant_images')
+      .delete()
+      .eq('variant_id', variantId);
+    
+    // Delete submission_votes
+    await supabase
+      .from('submission_votes')
+      .delete()
+      .eq('variant_id', variantId);
+    
+    // Now delete the variant
     const { error } = await supabase
       .from('variants')
       .delete()
       .eq('id', variantId);
     
-    if (error) {
-      console.error('Delete error:', error);
-      alert('Error: ' + error.message);
-      return;
-    }
+    if (error) throw error;
     
-    alert('Submission rejected and deleted.');
+    alert('Submission rejected!');
     await loadPendingSubmissions();
   } catch (error) {
-    alert('Error rejecting: ' + error.message);
+    alert('Error: ' + error.message + ' - Check if you ran all the SQL policies');
   }
 };
 
