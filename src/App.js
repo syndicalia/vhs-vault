@@ -35,6 +35,7 @@ export default function VHSCollectionTracker() {
   const [tmdbSearchResults, setTmdbSearchResults] = useState([]);
   const [showTmdbDropdown, setShowTmdbDropdown] = useState(false);
   const [tmdbSearchTimeout, setTmdbSearchTimeout] = useState(null);
+  const [tmdbSearchTerm, setTmdbSearchTerm] = useState('');
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [collectionToAdd, setCollectionToAdd] = useState({ masterId: null, variantId: null });
   const [collectionDetails, setCollectionDetails] = useState({ condition: '', notes: '' });
@@ -1103,23 +1104,142 @@ export default function VHSCollectionTracker() {
       <div className="max-w-7xl mx-auto px-6 py-12">
         {view === 'search' && (
           <>
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search titles or directors..."
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              {/* Local Database Search */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Search Your Collection
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search titles or directors..."
+                    className="w-full pl-10 pr-4 py-3 border-2 border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Search existing titles in the database</p>
               </div>
+
+              {/* TMDB Search */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Find New Titles (TMDB)
+                </label>
+                <div className="relative tmdb-search-container">
+                  <Search className="absolute left-3 top-3 w-5 h-5 text-orange-400" />
+                  <input
+                    type="text"
+                    value={tmdbSearchTerm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setTmdbSearchTerm(value);
+                      handleTitleSearch(value);
+                    }}
+                    onFocus={() => {
+                      if (tmdbSearchResults.length > 0) {
+                        setShowTmdbDropdown(true);
+                      }
+                    }}
+                    placeholder="Search TMDB to add new titles..."
+                    className="w-full pl-10 pr-4 py-3 border-2 border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    autoComplete="off"
+                  />
+                  {showTmdbDropdown && tmdbSearchResults.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-2xl max-h-96 overflow-y-auto">
+                      {tmdbSearchResults.map((movie) => (
+                        <div
+                          key={movie.id}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+
+                            try {
+                              const response = await fetch(
+                                `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+                              );
+                              const details = await response.json();
+
+                              let director = '';
+                              if (details.credits && details.credits.crew) {
+                                const directorObj = details.credits.crew.find(person => person.job === 'Director');
+                                director = directorObj ? directorObj.name : '';
+                              }
+
+                              let studio = '';
+                              if (details.production_companies && details.production_companies.length > 0) {
+                                studio = details.production_companies[0].name;
+                              }
+
+                              let genres = '';
+                              if (details.genres && details.genres.length > 0) {
+                                genres = details.genres.map(g => g.name).join(', ');
+                              }
+
+                              setNewSubmission({
+                                masterTitle: movie.title,
+                                year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+                                director: director,
+                                studio: studio,
+                                genre: genres,
+                                variantFormat: 'VHS',
+                                variantRegion: '',
+                                variantRelease: '',
+                                variantPackaging: '',
+                                variantNotes: '',
+                                variantBarcode: '',
+                                imageCover: null,
+                                imageBack: null,
+                                imageSpine: null,
+                                imageTapeLabel: null
+                              });
+
+                              setShowTmdbDropdown(false);
+                              setTmdbSearchResults([]);
+                              setTmdbSearchTerm('');
+                              setSubmitType('master');
+                              setShowSubmitModal(true);
+                            } catch (error) {
+                              console.error('Error fetching TMDB details:', error);
+                              alert('Error loading movie details. Please try again.');
+                            }
+                          }}
+                          className="flex items-center p-3 hover:bg-orange-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition"
+                        >
+                          {movie.poster_path ? (
+                            <img
+                              src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
+                              alt={movie.title}
+                              className="w-12 h-18 object-cover rounded mr-3 flex-shrink-0 shadow"
+                            />
+                          ) : (
+                            <div className="w-12 h-18 bg-gray-200 rounded mr-3 flex-shrink-0 flex items-center justify-center">
+                              <Film className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-semibold text-gray-900">{movie.title}</div>
+                            <div className="text-sm text-gray-600">
+                              {movie.release_date ? movie.release_date.substring(0, 4) : 'Unknown'}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Search online movie database to add new titles</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end mb-6">
               <button
                 onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
-                className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
+                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center space-x-2 shadow-lg"
               >
                 <Plus className="w-5 h-5" />
-                <span>Add New Title</span>
+                <span>Add Title Manually</span>
               </button>
             </div>
 
