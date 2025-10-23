@@ -35,6 +35,9 @@ export default function VHSCollectionTracker() {
   const [tmdbSearchResults, setTmdbSearchResults] = useState([]);
   const [showTmdbDropdown, setShowTmdbDropdown] = useState(false);
   const [tmdbSearchTimeout, setTmdbSearchTimeout] = useState(null);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [collectionToAdd, setCollectionToAdd] = useState({ masterId: null, variantId: null });
+  const [collectionDetails, setCollectionDetails] = useState({ condition: '', notes: '' });
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -355,12 +358,37 @@ export default function VHSCollectionTracker() {
     await supabase.auth.signOut();
   };
 
-  const addToCollection = async (masterId, variantId) => {
+  const showAddToCollectionModal = (masterId, variantId) => {
+    setCollectionToAdd({ masterId, variantId });
+    setCollectionDetails({ condition: '', notes: '' });
+    setShowCollectionModal(true);
+  };
+
+  const addToCollection = async (masterId, variantId, condition = null, notes = null) => {
     const { error } = await supabase
       .from('user_collections')
-      .insert([{ user_id: user.id, master_id: masterId, variant_id: variantId }]);
+      .insert([{
+        user_id: user.id,
+        master_id: masterId,
+        variant_id: variantId,
+        condition: condition,
+        notes: notes
+      }]);
 
-    if (!error) loadUserCollection();
+    if (!error) {
+      loadUserCollection();
+      setShowCollectionModal(false);
+      setCollectionDetails({ condition: '', notes: '' });
+    }
+  };
+
+  const handleAddToCollection = () => {
+    addToCollection(
+      collectionToAdd.masterId,
+      collectionToAdd.variantId,
+      collectionDetails.condition || null,
+      collectionDetails.notes || null
+    );
   };
 
   const removeFromCollection = async (variantId) => {
@@ -887,6 +915,11 @@ export default function VHSCollectionTracker() {
           setEditingVariant(null);
         } else {
           // Create new variant
+          if (!selectedMaster) {
+            alert('Error: No master release selected. Please select a title first.');
+            return;
+          }
+
           const { data: variant, error } = await supabase
             .from('variants')
             .insert([{
@@ -1264,7 +1297,7 @@ export default function VHSCollectionTracker() {
                           </div>
                           {selectedVariant.notes && (
                             <div className="md:col-span-2">
-                              <p className="text-sm font-semibold text-gray-700">Notes</p>
+                              <p className="text-sm font-semibold text-gray-700">Variant Notes</p>
                               <p className="text-gray-600 italic">{selectedVariant.notes}</p>
                             </div>
                           )}
@@ -1278,7 +1311,7 @@ export default function VHSCollectionTracker() {
                             if (isInCollection(selectedVariant.id)) {
                               removeFromCollection(selectedVariant.id);
                             } else {
-                              addToCollection(selectedMaster?.id, selectedVariant.id);
+                              showAddToCollectionModal(selectedMaster?.id, selectedVariant.id);
                             }
                           }}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
@@ -1534,7 +1567,9 @@ export default function VHSCollectionTracker() {
                               <span className="font-semibold">Barcode:</span> {variant.barcode}
                             </p>
                             {variant.notes && (
-                              <p className="text-gray-600 text-sm mt-2 italic">{variant.notes}</p>
+                              <p className="text-gray-600 text-sm mt-2">
+                                <span className="font-semibold">Variant Notes:</span> <span className="italic">{variant.notes}</span>
+                              </p>
                             )}
                             <p className="text-xs text-gray-500 mt-2">
                               {variant.votes_up || 0} 👍 {variant.votes_down || 0} 👎
@@ -1548,7 +1583,7 @@ export default function VHSCollectionTracker() {
                                 if (inColl) {
                                   removeFromCollection(variant.id);
                                 } else {
-                                  addToCollection(selectedMaster.id, variant.id);
+                                  showAddToCollectionModal(selectedMaster.id, variant.id);
                                 }
                               }}
                               className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-2 ${
@@ -1729,7 +1764,7 @@ export default function VHSCollectionTracker() {
                           </div>
                           {selectedVariant.notes && (
                             <div className="md:col-span-2">
-                              <p className="text-sm font-semibold text-gray-700">Notes</p>
+                              <p className="text-sm font-semibold text-gray-700">Variant Notes</p>
                               <p className="text-gray-600 italic">{selectedVariant.notes}</p>
                             </div>
                           )}
@@ -1743,7 +1778,7 @@ export default function VHSCollectionTracker() {
                             if (isInCollection(selectedVariant.id)) {
                               removeFromCollection(selectedVariant.id);
                             } else {
-                              addToCollection(selectedMaster?.id, selectedVariant.id);
+                              showAddToCollectionModal(selectedMaster?.id, selectedVariant.id);
                             }
                           }}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
@@ -2124,9 +2159,31 @@ export default function VHSCollectionTracker() {
                             {item.variant.region}
                           </span>
                         </div>
-                        <p className="text-gray-700 text-sm">
+                        <p className="text-gray-700 text-sm mb-3">
                           {item.variant.release_year} • {item.variant.packaging}
                         </p>
+
+                        {/* Personal Collection Details */}
+                        {(collection.find(c => c.variant_id === item.variant.id)?.condition || collection.find(c => c.variant_id === item.variant.id)?.notes) && (
+                          <div className="border-t pt-3 mt-3">
+                            {collection.find(c => c.variant_id === item.variant.id)?.condition && (
+                              <div className="mb-2">
+                                <span className="text-sm font-semibold text-gray-700">Condition: </span>
+                                <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-sm">
+                                  {collection.find(c => c.variant_id === item.variant.id).condition}
+                                </span>
+                              </div>
+                            )}
+                            {collection.find(c => c.variant_id === item.variant.id)?.notes && (
+                              <div>
+                                <p className="text-sm font-semibold text-gray-700">My Notes:</p>
+                                <p className="text-sm text-gray-600 italic mt-1">
+                                  {collection.find(c => c.variant_id === item.variant.id).notes}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Remove Button - Right Side */}
@@ -2616,13 +2673,13 @@ export default function VHSCollectionTracker() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Variant Notes (Optional)</label>
                       <textarea
                         value={newSubmission.variantNotes}
                         onChange={(e) => setNewSubmission({...newSubmission, variantNotes: e.target.value})}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         rows="3"
-                        placeholder="Special edition notes, condition, etc."
+                        placeholder="Release-specific notes (e.g., special edition features, rental version, etc.)"
                       />
                     </div>
 
@@ -2841,6 +2898,63 @@ export default function VHSCollectionTracker() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCollectionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Add to Collection</h2>
+            <p className="text-gray-600 mb-6">Add personal details about this item in your collection.</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Condition</label>
+                <select
+                  value={collectionDetails.condition}
+                  onChange={(e) => setCollectionDetails({...collectionDetails, condition: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">Select condition...</option>
+                  <option value="Mint">Mint</option>
+                  <option value="Near Mint">Near Mint</option>
+                  <option value="Very Good">Very Good</option>
+                  <option value="Good">Good</option>
+                  <option value="Fair">Fair</option>
+                  <option value="Poor">Poor</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Personal Notes (Optional)</label>
+                <textarea
+                  value={collectionDetails.notes}
+                  onChange={(e) => setCollectionDetails({...collectionDetails, notes: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  rows="3"
+                  placeholder="Where you got it, personal memories, restoration notes, etc."
+                />
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowCollectionModal(false);
+                  setCollectionDetails({ condition: '', notes: '' });
+                }}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddToCollection}
+                className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
+              >
+                Add to Collection
+              </button>
             </div>
           </div>
         </div>
