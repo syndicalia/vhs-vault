@@ -14,7 +14,6 @@ export default function VHSCollectionTracker() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [masterReleases, setMasterReleases] = useState([]);
-  const [topReleases, setTopReleases] = useState([]);
   const [collection, setCollection] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [ratings, setRatings] = useState([]);
@@ -111,7 +110,6 @@ export default function VHSCollectionTracker() {
   const loadAllData = async () => {
     await Promise.all([
       loadMasterReleases(),
-      loadTopReleases(),
       loadUserCollection(),
       loadUserWishlist(),
       loadUserRatings(),
@@ -127,49 +125,6 @@ export default function VHSCollectionTracker() {
 
     if (!error && data) {
       setMasterReleases(data);
-    }
-  };
-
-  const loadTopReleases = async () => {
-    // Get collection counts by master_id
-    const { data: collectionCounts, error: countError } = await supabase
-      .from('user_collections')
-      .select('master_id');
-
-    if (countError || !collectionCounts) {
-      setTopReleases([]);
-      return;
-    }
-
-    // Count occurrences of each master_id
-    const counts = {};
-    collectionCounts.forEach(item => {
-      counts[item.master_id] = (counts[item.master_id] || 0) + 1;
-    });
-
-    // Sort by count and get top 5 master_ids
-    const topMasterIds = Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([masterId]) => parseInt(masterId));
-
-    if (topMasterIds.length === 0) {
-      setTopReleases([]);
-      return;
-    }
-
-    // Fetch the actual master releases with their variants
-    const { data: releases, error: releasesError } = await supabase
-      .from('master_releases')
-      .select('*, variants(*, variant_images(*))')
-      .in('id', topMasterIds);
-
-    if (!releasesError && releases) {
-      // Sort releases by the counts we calculated
-      const sortedReleases = releases.sort((a, b) => {
-        return (counts[b.id] || 0) - (counts[a.id] || 0);
-      });
-      setTopReleases(sortedReleases);
     }
   };
 
@@ -990,12 +945,18 @@ export default function VHSCollectionTracker() {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full">
-          <div className="flex items-center justify-center mb-6">
-            <Film className="w-12 h-12 text-purple-600 mr-3" />
-            <h1 className="text-3xl font-bold text-gray-800">VHS Vault</h1>
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-orange-500">
+          <div className="flex flex-col items-center justify-center mb-8">
+            <div className="relative mb-4">
+              <Film className="w-16 h-16 text-orange-400 drop-shadow-2xl" />
+              <div className="absolute -inset-2 bg-orange-400 rounded-full opacity-20 blur-lg"></div>
+            </div>
+            <h1 className="text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-500 via-yellow-400 to-orange-500 mb-2">
+              VHS VAULT
+            </h1>
+            <p className="text-sm text-gray-600 font-mono tracking-wider">REWIND • PLAY • COLLECT</p>
           </div>
-          <p className="text-gray-600 text-center mb-6">
+          <p className="text-gray-700 text-center mb-6 font-semibold">
             {isSignUp ? 'Create your account' : 'Sign in to your account'}
           </p>
           <div>
@@ -1233,16 +1194,6 @@ export default function VHSCollectionTracker() {
               </div>
             </div>
 
-            <div className="flex justify-end mb-6">
-              <button
-                onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
-                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center space-x-2 shadow-lg"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add Title Manually</span>
-              </button>
-            </div>
-
             {selectedVariant ? (
               <div>
                 <div className="flex justify-between items-center mb-4">
@@ -1374,67 +1325,67 @@ export default function VHSCollectionTracker() {
               </div>
             ) : !selectedMaster ? (
               <div>
-                <h2 className="text-4xl font-bold text-gray-900 mb-8">
-                  {searchTerm ? 'Search Results' : 'Top Variants in Collections'}
-                </h2>
-                <div className="grid gap-6">
-                  {(searchTerm ? filteredMasters : topReleases).map(master => (
-                  <div
-                    key={master.id}
-                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 cursor-pointer border border-gray-100"
-                    onClick={() => setSelectedMaster(master)}
-                  >
-                    <div className="flex gap-4 items-start">
-                      {master.poster_url ? (
-                        <img
-                          src={master.poster_url}
-                          alt={`${master.title} poster`}
-                          className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="w-24 h-36 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
-                          <Film className="w-12 h-12 text-purple-400" />
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <h2 className="text-xl font-bold text-gray-800 mb-1">{master.title}</h2>
-                        <p className="text-gray-600">{master.director} • {master.year} • {master.genre}</p>
-                        <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
-                        <div className="flex items-center space-x-4 mt-3">
-                          <div className="flex items-center space-x-1">
-                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                            <span className="font-medium">{master.avg_rating || 0}</span>
-                            <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
-                          </div>
-                          <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                  {(searchTerm ? filteredMasters : topReleases).length === 0 && (
-                    <div className="bg-gradient-to-br from-gray-50 to-purple-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-gray-300">
-                      <div className="relative inline-block mb-6">
-                        <Film className="w-24 h-24 text-gray-400 mx-auto" />
-                        <div className="absolute inset-0 bg-gray-400 rounded-full opacity-20 blur-xl"></div>
-                      </div>
-                      <h3 className="text-3xl font-bold text-gray-800 mb-3">
-                        {searchTerm ? 'No Matches Found' : 'No Tapes Yet'}
-                      </h3>
-                      <p className="text-gray-600 text-lg mb-6">
-                        {searchTerm ? 'Try adjusting your search' : 'Be the first to add titles to the vault!'}
-                      </p>
-                      {!searchTerm && (
-                        <button
-                          onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
-                          className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                {searchTerm && (
+                  <>
+                    <h2 className="text-4xl font-bold text-gray-900 mb-8">Search Results</h2>
+                    <div className="grid gap-6">
+                      {filteredMasters.map(master => (
+                        <div
+                          key={master.id}
+                          className="bg-white rounded-lg shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 cursor-pointer border border-gray-100"
+                          onClick={() => setSelectedMaster(master)}
                         >
-                          Add First Title
-                        </button>
+                          <div className="flex gap-4 items-start">
+                            {master.poster_url ? (
+                              <img
+                                src={master.poster_url}
+                                alt={`${master.title} poster`}
+                                className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-24 h-36 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                                <Film className="w-12 h-12 text-purple-400" />
+                              </div>
+                            )}
+                            <div className="flex-1">
+                              <h2 className="text-xl font-bold text-gray-800 mb-1">{master.title}</h2>
+                              <p className="text-gray-600">{master.director} • {master.year} • {master.genre}</p>
+                              <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
+                              <div className="flex items-center space-x-4 mt-3">
+                                <div className="flex items-center space-x-1">
+                                  <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                                  <span className="font-medium">{master.avg_rating || 0}</span>
+                                  <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
+                                </div>
+                                <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {filteredMasters.length === 0 && (
+                        <div className="bg-gradient-to-br from-gray-50 to-purple-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-gray-300">
+                          <div className="relative inline-block mb-6">
+                            <Film className="w-24 h-24 text-gray-400 mx-auto" />
+                            <div className="absolute inset-0 bg-gray-400 rounded-full opacity-20 blur-xl"></div>
+                          </div>
+                          <h3 className="text-3xl font-bold text-gray-800 mb-3">No Matches Found</h3>
+                          <p className="text-gray-600 text-lg mb-6">Try adjusting your search or use TMDB to add new titles</p>
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
+                  </>
+                )}
+                {!searchTerm && (
+                  <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
+                    <div className="relative inline-block mb-6">
+                      <Search className="w-24 h-24 text-purple-400 mx-auto" />
+                      <div className="absolute inset-0 bg-purple-400 rounded-full opacity-20 blur-xl"></div>
+                    </div>
+                    <h3 className="text-3xl font-bold text-gray-800 mb-3">Start Your Search</h3>
+                    <p className="text-gray-600 text-lg">Use the search bars above to find existing titles or discover new ones on TMDB</p>
+                  </div>
+                )}
               </div>
             ) : (
               <div>
