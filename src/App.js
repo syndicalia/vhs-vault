@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
 const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -65,6 +66,7 @@ export default function VHSCollectionTracker() {
     variantPackaging: '',
     variantNotes: '',
     variantBarcode: '',
+    variantCondition: '',
     // Advanced optional fields
     variantEditionType: '',
     variantAudioLanguage: '',
@@ -634,13 +636,13 @@ export default function VHSCollectionTracker() {
       }
 
       console.log('Approval successful:', data);
-      alert('Submission approved!');
+      toast.success('Submission approved!');
 
       // Reload all data to ensure consistency
       await loadAllData();
     } catch (error) {
       console.error('Error in approveSubmission:', error);
-      alert('Error approving submission: ' + error.message);
+      toast.error('Error approving submission: ' + error.message);
     }
   };
 
@@ -671,7 +673,7 @@ export default function VHSCollectionTracker() {
 
       if (error) throw error;
 
-      alert('Submission rejected and deleted.');
+      toast.success('Submission rejected and deleted.');
       await loadPendingSubmissions();
     } catch (error) {
       alert('Error rejecting submission: ' + error.message);
@@ -707,7 +709,7 @@ export default function VHSCollectionTracker() {
 
       if (error) throw error;
 
-      alert('Variant deleted successfully.');
+      toast.success('Variant deleted successfully!');
       await loadAllData();
     } catch (error) {
       alert('Error deleting variant: ' + error.message);
@@ -753,7 +755,7 @@ export default function VHSCollectionTracker() {
 
       if (error) throw error;
 
-      alert('Master release and all variants deleted successfully.');
+      toast.success('Master release and all variants deleted successfully!');
       setSelectedMaster(null);
       await loadAllData();
     } catch (error) {
@@ -863,18 +865,18 @@ export default function VHSCollectionTracker() {
     try {
       // Validate TMDB selection for new master submissions
       if (submitType === 'master' && !editingMaster && !tmdbMovieSelected) {
-        alert('Please select a movie from TMDB! You must choose a movie from the dropdown to ensure accurate data.');
+        toast.error('Please select a movie from TMDB! You must choose a movie from the dropdown to ensure accurate data.');
         return;
       }
 
       // Validate required fields for variants
       if (!editingMaster) {
         if (!newSubmission.variantRegion) {
-          alert('Region is required! Please select a region before submitting.');
+          toast.error('Region is required! Please select a region before submitting.');
           return;
         }
         if (!newSubmission.variantPackaging) {
-          alert('Case Type is required! Please select a case type before submitting.');
+          toast.error('Case Type is required! Please select a case type before submitting.');
           return;
         }
       }
@@ -882,11 +884,11 @@ export default function VHSCollectionTracker() {
       // Validate required images for new submissions (not edits)
       if (!editingMaster && !editingVariant) {
         if (!newSubmission.imageCover) {
-          alert('Cover image is required! Please upload a cover image.');
+          toast.error('Cover image is required! Please upload a cover image.');
           return;
         }
         if (!newSubmission.imageBack) {
-          alert('Back image is required! Please upload a back image.');
+          toast.error('Back image is required! Please upload a back image.');
           return;
         }
         // Spine and Tape Label are optional
@@ -911,7 +913,7 @@ export default function VHSCollectionTracker() {
 
           if (masterError) throw masterError;
 
-          alert('Master release updated successfully!');
+          toast.success('Master release updated successfully!');
           setEditingMaster(null);
         } else {
           // Create new master
@@ -948,6 +950,7 @@ export default function VHSCollectionTracker() {
               packaging: newSubmission.variantPackaging,
               notes: newSubmission.variantNotes,
               barcode: newSubmission.variantBarcode,
+              condition: newSubmission.variantCondition || null,
               edition_type: newSubmission.variantEditionType || null,
               audio_language: newSubmission.variantAudioLanguage || null,
               subtitles: newSubmission.variantSubtitles || null,
@@ -963,7 +966,7 @@ export default function VHSCollectionTracker() {
           if (variantError) throw variantError;
 
           await uploadImages(variant.id);
-          alert('Submission sent for review!');
+          toast.success('Submission sent for review!');
         }
       } else {
         // Variant only
@@ -978,6 +981,7 @@ export default function VHSCollectionTracker() {
               packaging: newSubmission.variantPackaging,
               notes: newSubmission.variantNotes,
               barcode: newSubmission.variantBarcode,
+              condition: newSubmission.variantCondition || null,
               edition_type: newSubmission.variantEditionType || null,
               audio_language: newSubmission.variantAudioLanguage || null,
               subtitles: newSubmission.variantSubtitles || null,
@@ -1010,6 +1014,7 @@ export default function VHSCollectionTracker() {
               packaging: newSubmission.variantPackaging,
               notes: newSubmission.variantNotes,
               barcode: newSubmission.variantBarcode,
+              condition: newSubmission.variantCondition || null,
               edition_type: newSubmission.variantEditionType || null,
               audio_language: newSubmission.variantAudioLanguage || null,
               subtitles: newSubmission.variantSubtitles || null,
@@ -1025,7 +1030,7 @@ export default function VHSCollectionTracker() {
           if (error) throw error;
 
           await uploadImages(variant.id);
-          alert('Submission sent for review!');
+          toast.success('Submission sent for review!');
         }
       }
 
@@ -1035,7 +1040,7 @@ export default function VHSCollectionTracker() {
       setNewSubmission({
         masterTitle: '', year: '', director: '', studio: '', genre: '',
         variantFormat: 'VHS', variantRegion: '', variantRelease: '',
-        variantPackaging: '', variantNotes: '', variantBarcode: '',
+        variantPackaging: '', variantNotes: '', variantBarcode: '', variantCondition: '',
         variantEditionType: '', variantAudioLanguage: '', variantSubtitles: '',
         variantRating: '', variantAspectRatio: '', variantShellColor: '',
         imageCover: null, imageBack: null, imageSpine: null, imageTapeLabel: null
@@ -1043,7 +1048,7 @@ export default function VHSCollectionTracker() {
 
       loadAllData();
     } catch (error) {
-      alert('Error: ' + error.message);
+      toast.error('Error: ' + error.message);
     }
   };
 
@@ -1124,6 +1129,7 @@ export default function VHSCollectionTracker() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Toaster position="top-right" />
       <div className="bg-purple-600 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -1252,6 +1258,7 @@ export default function VHSCollectionTracker() {
                               variantPackaging: '',
                               variantNotes: '',
                               variantBarcode: '',
+                              variantCondition: '',
                               imageCover: null,
                               imageBack: null,
                               imageSpine: null,
@@ -1865,6 +1872,7 @@ export default function VHSCollectionTracker() {
                               variantPackaging: '',
                               variantNotes: '',
                               variantBarcode: '',
+                              variantCondition: '',
                               imageCover: null,
                               imageBack: null,
                               imageSpine: null,
@@ -2936,15 +2944,33 @@ export default function VHSCollectionTracker() {
                         </select>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Barcode/UPC</label>
-                      <input
-                        type="text"
-                        value={newSubmission.variantBarcode}
-                        onChange={(e) => setNewSubmission({...newSubmission, variantBarcode: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="Enter barcode number"
-                      />
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Barcode/UPC</label>
+                        <input
+                          type="text"
+                          value={newSubmission.variantBarcode}
+                          onChange={(e) => setNewSubmission({...newSubmission, variantBarcode: e.target.value})}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="Enter barcode number"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Condition</label>
+                        <select
+                          value={newSubmission.variantCondition}
+                          onChange={(e) => setNewSubmission({...newSubmission, variantCondition: e.target.value})}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        >
+                          <option value="">Select Condition</option>
+                          <option value="Mint">Mint (M) - Perfect, sealed</option>
+                          <option value="Near Mint">Near Mint (NM) - Like new</option>
+                          <option value="Very Good">Very Good (VG) - Minor wear</option>
+                          <option value="Good">Good (G) - Noticeable wear</option>
+                          <option value="Fair">Fair (F) - Heavy wear</option>
+                          <option value="Poor">Poor (P) - Damaged</option>
+                        </select>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
