@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 
 const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -50,6 +50,9 @@ export default function VHSCollectionTracker() {
   // Track if a TMDB movie has been selected (to lock auto-filled fields)
   const [tmdbMovieSelected, setTmdbMovieSelected] = useState(false);
 
+  // Track if advanced fields are shown
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
     year: '',
@@ -62,6 +65,13 @@ export default function VHSCollectionTracker() {
     variantPackaging: '',
     variantNotes: '',
     variantBarcode: '',
+    // Advanced optional fields
+    variantEditionType: '',
+    variantAudioLanguage: '',
+    variantSubtitles: '',
+    variantRating: '',
+    variantAspectRatio: '',
+    variantShellColor: '',
     imageCover: null,
     imageBack: null,
     imageSpine: null,
@@ -864,7 +874,7 @@ export default function VHSCollectionTracker() {
           return;
         }
         if (!newSubmission.variantPackaging) {
-          alert('Packaging is required! Please select a packaging type before submitting.');
+          alert('Case Type is required! Please select a case type before submitting.');
           return;
         }
       }
@@ -938,6 +948,12 @@ export default function VHSCollectionTracker() {
               packaging: newSubmission.variantPackaging,
               notes: newSubmission.variantNotes,
               barcode: newSubmission.variantBarcode,
+              edition_type: newSubmission.variantEditionType || null,
+              audio_language: newSubmission.variantAudioLanguage || null,
+              subtitles: newSubmission.variantSubtitles || null,
+              rating: newSubmission.variantRating || null,
+              aspect_ratio: newSubmission.variantAspectRatio || null,
+              shell_color: newSubmission.variantShellColor || null,
               submitted_by: user.id,
               approved: false
             }])
@@ -961,7 +977,13 @@ export default function VHSCollectionTracker() {
               release_year: newSubmission.variantRelease,
               packaging: newSubmission.variantPackaging,
               notes: newSubmission.variantNotes,
-              barcode: newSubmission.variantBarcode
+              barcode: newSubmission.variantBarcode,
+              edition_type: newSubmission.variantEditionType || null,
+              audio_language: newSubmission.variantAudioLanguage || null,
+              subtitles: newSubmission.variantSubtitles || null,
+              rating: newSubmission.variantRating || null,
+              aspect_ratio: newSubmission.variantAspectRatio || null,
+              shell_color: newSubmission.variantShellColor || null
             })
             .eq('id', editingVariant.id);
 
@@ -988,6 +1010,12 @@ export default function VHSCollectionTracker() {
               packaging: newSubmission.variantPackaging,
               notes: newSubmission.variantNotes,
               barcode: newSubmission.variantBarcode,
+              edition_type: newSubmission.variantEditionType || null,
+              audio_language: newSubmission.variantAudioLanguage || null,
+              subtitles: newSubmission.variantSubtitles || null,
+              rating: newSubmission.variantRating || null,
+              aspect_ratio: newSubmission.variantAspectRatio || null,
+              shell_color: newSubmission.variantShellColor || null,
               submitted_by: user.id,
               approved: false
             }])
@@ -1003,10 +1031,13 @@ export default function VHSCollectionTracker() {
 
       setShowSubmitModal(false);
       setTmdbMovieSelected(false); // Reset TMDB lock
+      setShowAdvancedFields(false); // Reset advanced fields visibility
       setNewSubmission({
         masterTitle: '', year: '', director: '', studio: '', genre: '',
         variantFormat: 'VHS', variantRegion: '', variantRelease: '',
         variantPackaging: '', variantNotes: '', variantBarcode: '',
+        variantEditionType: '', variantAudioLanguage: '', variantSubtitles: '',
+        variantRating: '', variantAspectRatio: '', variantShellColor: '',
         imageCover: null, imageBack: null, imageSpine: null, imageTapeLabel: null
       });
 
@@ -2787,22 +2818,17 @@ export default function VHSCollectionTracker() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Packaging</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Case Type</label>
                         <select
                           value={newSubmission.variantPackaging}
                           onChange={(e) => setNewSubmission({...newSubmission, variantPackaging: e.target.value})}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         >
-                          <option value="">Select Packaging</option>
+                          <option value="">Select Case Type</option>
+                          <option value="Slipcase">Slipcase</option>
                           <option value="Clamshell">Clamshell</option>
-                          <option value="Slipcover">Slipcover</option>
-                          <option value="Cardboard Sleeve">Cardboard Sleeve</option>
-                          <option value="Plastic Case">Plastic Case</option>
                           <option value="Big Box">Big Box</option>
-                          <option value="Standard Case">Standard Case</option>
-                          <option value="Rental Case">Rental Case</option>
-                          <option value="Screener">Screener</option>
-                          <option value="Promotional">Promotional</option>
+                          <option value="Other">Other</option>
                         </select>
                       </div>
                     </div>
@@ -2825,6 +2851,135 @@ export default function VHSCollectionTracker() {
                         rows="3"
                         placeholder="Special edition notes, condition, etc."
                       />
+                    </div>
+
+                    {/* Advanced Fields Section */}
+                    <div className="border-t pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvancedFields(!showAdvancedFields)}
+                        className="w-full flex items-center justify-between text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition"
+                      >
+                        <span className="font-medium text-gray-700">Advanced Fields (Optional)</span>
+                        {showAdvancedFields ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
+                      </button>
+
+                      {showAdvancedFields && (
+                        <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-lg">
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {/* Edition Type */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Edition Type</label>
+                              <select
+                                value={newSubmission.variantEditionType}
+                                onChange={(e) => setNewSubmission({...newSubmission, variantEditionType: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Edition</option>
+                                <option value="Retail">Retail</option>
+                                <option value="Promotional">Promotional</option>
+                                <option value="Screener">Screener</option>
+                                <option value="Bootleg">Bootleg</option>
+                              </select>
+                            </div>
+
+                            {/* Audio Language */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Audio Language</label>
+                              <select
+                                value={newSubmission.variantAudioLanguage}
+                                onChange={(e) => setNewSubmission({...newSubmission, variantAudioLanguage: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Language</option>
+                                <option value="English">English</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="French">French</option>
+                                <option value="Japanese">Japanese</option>
+                                <option value="Chinese">Chinese</option>
+                                <option value="German">German</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {/* Subtitles */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Subtitles</label>
+                              <select
+                                value={newSubmission.variantSubtitles}
+                                onChange={(e) => setNewSubmission({...newSubmission, variantSubtitles: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Option</option>
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                              </select>
+                            </div>
+
+                            {/* Original Rating */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Original Rating</label>
+                              <select
+                                value={newSubmission.variantRating}
+                                onChange={(e) => setNewSubmission({...newSubmission, variantRating: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Rating</option>
+                                <option value="G">G</option>
+                                <option value="PG">PG</option>
+                                <option value="PG-13">PG-13</option>
+                                <option value="R">R</option>
+                                <option value="NC-17">NC-17</option>
+                                <option value="18+">18+</option>
+                                <option value="Not Rated">Not Rated</option>
+                                <option value="Unrated">Unrated</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {/* Aspect Ratio */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Aspect Ratio</label>
+                              <select
+                                value={newSubmission.variantAspectRatio}
+                                onChange={(e) => setNewSubmission({...newSubmission, variantAspectRatio: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Aspect Ratio</option>
+                                <option value="4:3 (Fullscreen)">4:3 (Fullscreen)</option>
+                                <option value="1.85:1 (Widescreen)">1.85:1 (Widescreen)</option>
+                                <option value="2.35:1 (Widescreen)">2.35:1 (Widescreen)</option>
+                                <option value="Letterboxed">Letterboxed</option>
+                                <option value="Open Matte">Open Matte</option>
+                                <option value="Pan and Scan">Pan and Scan</option>
+                              </select>
+                            </div>
+
+                            {/* Shell Color */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Shell Color</label>
+                              <select
+                                value={newSubmission.variantShellColor}
+                                onChange={(e) => setNewSubmission({...newSubmission, variantShellColor: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Shell Color</option>
+                                <option value="Black">Black</option>
+                                <option value="White">White</option>
+                                <option value="Clear/Transparent">Clear/Transparent</option>
+                                <option value="Gray">Gray</option>
+                                <option value="Red">Red</option>
+                                <option value="Blue">Blue</option>
+                                <option value="Green">Green</option>
+                                <option value="Yellow">Yellow</option>
+                                <option value="Orange">Orange</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
