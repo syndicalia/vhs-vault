@@ -54,6 +54,12 @@ export default function VHSCollectionTracker() {
   // Track if advanced fields are shown
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
 
+  // Quick Add variant selection state
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [quickAddMaster, setQuickAddMaster] = useState(null);
+  const [quickAddVariants, setQuickAddVariants] = useState([]);
+  const [quickAddMode, setQuickAddMode] = useState('collection'); // 'collection' or 'wishlist'
+
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
     year: '',
@@ -447,7 +453,7 @@ export default function VHSCollectionTracker() {
     }
 
     try {
-      toast.loading('Adding to your ' + (addToWishlist ? 'wishlist' : 'collection') + '...');
+      toast.loading('Loading variants...');
 
       // Fetch full movie details
       const response = await fetch(
@@ -477,15 +483,15 @@ export default function VHSCollectionTracker() {
       // Check if master already exists
       const { data: existingMaster } = await supabase
         .from('master_releases')
-        .select('id')
+        .select('id, title, year, director, studio, genre, poster_url')
         .eq('title', movie.title)
         .eq('year', movie.release_date ? movie.release_date.substring(0, 4) : '')
         .single();
 
-      let masterId;
+      let master;
 
       if (existingMaster) {
-        masterId = existingMaster.id;
+        master = existingMaster;
       } else {
         // Create new master release
         const posterUrl = await searchTMDB(movie.title, movie.release_date ? movie.release_date.substring(0, 4) : '');
@@ -504,68 +510,107 @@ export default function VHSCollectionTracker() {
           .single();
 
         if (masterError) throw masterError;
-        masterId = newMaster.id;
+        master = newMaster;
       }
 
-      // Create minimal variant
-      const { data: variant, error: variantError } = await supabase
+      // Load all variants for this master
+      const { data: variants, error: variantsError } = await supabase
         .from('variants')
-        .insert([{
-          master_id: masterId,
-          format: 'VHS',
-          region: 'NTSC (USA)', // Default region
-          release_year: movie.release_date ? movie.release_date.substring(0, 4) : '',
-          packaging: 'Other', // Default packaging
-          notes: 'Quick add - details TBD',
-          barcode: '',
-          condition: '',
-          edition_type: null,
-          audio_language: null,
-          subtitles: null,
-          rating: null,
-          aspect_ratio: null,
-          shell_color: null,
-          submitted_by: user.id,
-          approved: true // Auto-approve quick adds
-        }])
-        .select()
-        .single();
+        .select('*')
+        .eq('master_id', master.id)
+        .eq('approved', true);
 
-      if (variantError) throw variantError;
+      if (variantsError) throw variantsError;
 
-      // Add to collection or wishlist
-      if (addToWishlist) {
-        const { error: wishlistError } = await supabase
-          .from('user_wishlists')
-          .insert([{ user_id: user.id, master_id: masterId, variant_id: variant.id }]);
+      // Set state and show variant selection modal
+      setQuickAddMaster(master);
+      setQuickAddVariants(variants || []);
+      setQuickAddMode(addToWishlist ? 'wishlist' : 'collection');
+      setShowQuickAddModal(true);
 
-        if (wishlistError) throw wishlistError;
-      } else {
-        const { error: collectionError } = await supabase
-          .from('user_collections')
-          .insert([{ user_id: user.id, master_id: masterId, variant_id: variant.id }]);
-
-        if (collectionError) throw collectionError;
-      }
-
-      toast.dismiss();
-      toast.success(`${movie.title} added to your ${addToWishlist ? 'wishlist' : 'collection'}!`);
-
-      // Reload data
-      loadAllData();
-
-      // Clear search
-      setSearchTerm('');
+      // Clear search dropdowns
       setShowSearchDropdown(false);
       setSearchTmdbResults([]);
       setShowBrowseDropdown(false);
       setBrowseTmdbResults([]);
 
+      toast.dismiss();
+
+    } catch (error) {
+      toast.dismiss();
+      toast.error('Error loading variants: ' + error.message);
+      console.error('Quick add error:', error);
+    }
+  };
+
+  const handleQuickAddVariant = async (variantId) => {
+    try {
+      toast.loading(`Adding to your ${quickAddMode}...`);
+
+      // Add to collection or wishlist
+      if (quickAddMode === 'wishlist') {
+        const { error: wishlistError } = await supabase
+          .from('user_wishlists')
+          .insert([{ user_id: user.id, master_id: quickAddMaster.id, variant_id: variantId }]);
+
+        if (wishlistError) throw wishlistError;
+      } else {
+        const { error: collectionError } = await supabase
+          .from('user_collections')
+          .insert([{ user_id: user.id, master_id: quickAddMaster.id, variant_id: variantId }]);
+
+        if (collectionError) throw collectionError;
+      }
+
+      toast.dismiss();
+      toast.success(`${quickAddMaster.title} added to your ${quickAddMode}!`);
+
+      // Reload data
+      loadAllData();
+
+      // Close modal
+      setShowQuickAddModal(false);
+      setQuickAddMaster(null);
+      setQuickAddVariants([]);
+
     } catch (error) {
       toast.dismiss();
       toast.error('Error adding item: ' + error.message);
-      console.error('Quick add error:', error);
+      console.error('Quick add variant error:', error);
     }
+  };
+
+  const handleQuickAddNewVariant = () => {
+    // Pre-fill the form with master data and open the full submission modal
+    setNewSubmission({
+      masterTitle: quickAddMaster.title,
+      year: quickAddMaster.year,
+      director: quickAddMaster.director,
+      studio: quickAddMaster.studio,
+      genre: quickAddMaster.genre,
+      variantFormat: 'VHS',
+      variantRegion: '',
+      variantRelease: '',
+      variantPackaging: '',
+      variantNotes: '',
+      variantBarcode: '',
+      variantCondition: '',
+      variantEditionType: '',
+      variantAudioLanguage: '',
+      variantSubtitles: '',
+      variantRating: '',
+      variantAspectRatio: '',
+      variantShellColor: '',
+      imageCover: null,
+      imageBack: null,
+      imageSpine: null,
+      imageTapeLabel: null
+    });
+
+    setSubmitType('variant');
+    setTmdbMovieSelected(true); // Lock master fields
+    setShowQuickAddModal(false);
+    setShowSubmitModal(true);
   };
 
   const handleAuth = async (e) => {
@@ -2919,6 +2964,130 @@ export default function VHSCollectionTracker() {
           </>
         )}
       </div>
+
+      {showQuickAddModal && quickAddMaster && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">
+                  Select Variant to Add to {quickAddMode === 'wishlist' ? 'Wishlist' : 'Collection'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowQuickAddModal(false);
+                    setQuickAddMaster(null);
+                    setQuickAddVariants([]);
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Master Release Info */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6 flex items-start gap-4">
+                {quickAddMaster.poster_url ? (
+                  <img
+                    src={quickAddMaster.poster_url}
+                    alt={quickAddMaster.title}
+                    className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-24 h-36 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
+                    <Film className="w-12 h-12 text-gray-400" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-gray-800 mb-1">{quickAddMaster.title}</h3>
+                  <div className="text-sm text-gray-600 space-y-1">
+                    <p><strong>Year:</strong> {quickAddMaster.year}</p>
+                    {quickAddMaster.director && <p><strong>Director:</strong> {quickAddMaster.director}</p>}
+                    {quickAddMaster.studio && <p><strong>Studio:</strong> {quickAddMaster.studio}</p>}
+                    {quickAddMaster.genre && <p><strong>Genre:</strong> {quickAddMaster.genre}</p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Variants List */}
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                  {quickAddVariants.length === 0 ? 'No Variants Available' : 'Available Variants'}
+                </h3>
+
+                {quickAddVariants.length === 0 ? (
+                  <div className="bg-gray-50 rounded-lg p-6 text-center text-gray-600">
+                    <p className="mb-4">No variants exist for this title yet.</p>
+                    <p className="text-sm">Click "Create New Variant" below to add one.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {quickAddVariants.map((variant) => (
+                      <div
+                        key={variant.id}
+                        className="border border-gray-200 rounded-lg p-4 hover:border-purple-300 transition"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                            <div>
+                              <span className="font-medium text-gray-700">Format:</span>
+                              <span className="ml-2 text-gray-900">{variant.format}</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-700">Region:</span>
+                              <span className="ml-2 text-gray-900">{variant.region || 'N/A'}</span>
+                            </div>
+                            {variant.packaging && (
+                              <div>
+                                <span className="font-medium text-gray-700">Packaging:</span>
+                                <span className="ml-2 text-gray-900">{variant.packaging}</span>
+                              </div>
+                            )}
+                            {variant.condition && (
+                              <div>
+                                <span className="font-medium text-gray-700">Condition:</span>
+                                <span className="ml-2 text-gray-900">{variant.condition}</span>
+                              </div>
+                            )}
+                            {variant.release_year && (
+                              <div>
+                                <span className="font-medium text-gray-700">Release:</span>
+                                <span className="ml-2 text-gray-900">{variant.release_year}</span>
+                              </div>
+                            )}
+                            {variant.notes && (
+                              <div className="col-span-2">
+                                <span className="font-medium text-gray-700">Notes:</span>
+                                <span className="ml-2 text-gray-900">{variant.notes}</span>
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleQuickAddVariant(variant.id)}
+                            className="ml-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Create New Variant Button */}
+              <button
+                onClick={handleQuickAddNewVariant}
+                className="w-full py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Create New Variant
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSubmitModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
