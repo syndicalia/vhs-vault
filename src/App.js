@@ -47,6 +47,9 @@ export default function VHSCollectionTracker() {
   const [showModalDropdown, setShowModalDropdown] = useState(false);
   const [modalTmdbTimeout, setModalTmdbTimeout] = useState(null);
 
+  // Track if a TMDB movie has been selected (to lock auto-filled fields)
+  const [tmdbMovieSelected, setTmdbMovieSelected] = useState(false);
+
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
     year: '',
@@ -408,6 +411,7 @@ export default function VHSCollectionTracker() {
         studio: studio,
         genre: genres
       });
+      setTmdbMovieSelected(true); // Lock auto-filled fields
       setShowModalDropdown(false);
       setModalTmdbResults([]);
     } catch (error) {
@@ -418,6 +422,7 @@ export default function VHSCollectionTracker() {
         masterTitle: movie.title,
         year: movie.release_date ? movie.release_date.substring(0, 4) : '',
       });
+      setTmdbMovieSelected(true); // Lock even with fallback
       setShowModalDropdown(false);
       setModalTmdbResults([]);
     }
@@ -846,6 +851,12 @@ export default function VHSCollectionTracker() {
 
   const handleSubmitEntry = async () => {
     try {
+      // Validate TMDB selection for new master submissions
+      if (submitType === 'master' && !editingMaster && !tmdbMovieSelected) {
+        alert('Please select a movie from TMDB! You must choose a movie from the dropdown to ensure accurate data.');
+        return;
+      }
+
       // Validate required fields for variants
       if (!editingMaster) {
         if (!newSubmission.variantRegion) {
@@ -868,14 +879,7 @@ export default function VHSCollectionTracker() {
           alert('Back image is required! Please upload a back image.');
           return;
         }
-        if (!newSubmission.imageSpine) {
-          alert('Spine image is required! Please upload a spine image.');
-          return;
-        }
-        if (!newSubmission.imageTapeLabel) {
-          alert('Tape Label image is required! Please upload a tape label image.');
-          return;
-        }
+        // Spine and Tape Label are optional
       }
 
       if (submitType === 'master') {
@@ -998,6 +1002,7 @@ export default function VHSCollectionTracker() {
       }
 
       setShowSubmitModal(false);
+      setTmdbMovieSelected(false); // Reset TMDB lock
       setNewSubmission({
         masterTitle: '', year: '', director: '', studio: '', genre: '',
         variantFormat: 'VHS', variantRegion: '', variantRelease: '',
@@ -1227,6 +1232,7 @@ export default function VHSCollectionTracker() {
                             setSearchTmdbResults([]);
                             setSearchTerm('');
                             setSubmitType('master');
+                            setTmdbMovieSelected(true); // Lock auto-filled fields
                             setShowSubmitModal(true);
 
                             console.log('Modal should be open now');
@@ -1793,6 +1799,7 @@ export default function VHSCollectionTracker() {
                             setBrowseTmdbResults([]);
                             setSearchTerm('');
                             setSubmitType('master');
+                            setTmdbMovieSelected(true); // Lock auto-filled fields
                             setShowSubmitModal(true);
 
                             console.log('Modal should be open now');
@@ -2603,6 +2610,7 @@ export default function VHSCollectionTracker() {
                 <button
                   onClick={() => {
                     setShowSubmitModal(false);
+                    setTmdbMovieSelected(false); // Reset TMDB lock
                     setEditingMaster(null);
                     setEditingVariant(null);
                   }}
@@ -2623,6 +2631,7 @@ export default function VHSCollectionTracker() {
                         onChange={(e) => {
                           const value = e.target.value;
                           setNewSubmission({...newSubmission, masterTitle: value});
+                          setTmdbMovieSelected(false); // Unlock fields when manually editing title
                           handleModalTitleSearch(value);
                         }}
                         onFocus={() => {
@@ -2677,7 +2686,8 @@ export default function VHSCollectionTracker() {
                               setNewSubmission({...newSubmission, year: value});
                             }
                           }}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          readOnly={tmdbMovieSelected}
+                          className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${tmdbMovieSelected ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                           placeholder="1999"
                           maxLength="4"
                         />
@@ -2688,7 +2698,8 @@ export default function VHSCollectionTracker() {
                           type="text"
                           value={newSubmission.genre}
                           onChange={(e) => setNewSubmission({...newSubmission, genre: e.target.value})}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          readOnly={tmdbMovieSelected}
+                          className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${tmdbMovieSelected ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                           placeholder="Action, Drama, etc."
                         />
                       </div>
@@ -2699,7 +2710,8 @@ export default function VHSCollectionTracker() {
                         type="text"
                         value={newSubmission.director}
                         onChange={(e) => setNewSubmission({...newSubmission, director: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        readOnly={tmdbMovieSelected}
+                        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${tmdbMovieSelected ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         placeholder="Director name"
                       />
                     </div>
@@ -2709,7 +2721,8 @@ export default function VHSCollectionTracker() {
                         type="text"
                         value={newSubmission.studio}
                         onChange={(e) => setNewSubmission({...newSubmission, studio: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        readOnly={tmdbMovieSelected}
+                        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${tmdbMovieSelected ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         placeholder="Production studio"
                       />
                     </div>
@@ -2733,7 +2746,6 @@ export default function VHSCollectionTracker() {
                         >
                           <option>VHS</option>
                           <option>Betamax</option>
-                          <option>Video CD</option>
                         </select>
                       </div>
                       <div>
@@ -2908,7 +2920,7 @@ export default function VHSCollectionTracker() {
 
                         {/* Spine Image */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Spine</label>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Spine (Optional)</label>
                           {newSubmission.imageSpine ? (
                             <div className="relative group">
                               <img
@@ -2951,7 +2963,7 @@ export default function VHSCollectionTracker() {
 
                         {/* Tape Label Image */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Tape Label</label>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Tape Label (Optional)</label>
                           {newSubmission.imageTapeLabel ? (
                             <div className="relative group">
                               <img
@@ -3015,6 +3027,7 @@ export default function VHSCollectionTracker() {
                   <button
                     onClick={() => {
                       setShowSubmitModal(false);
+                      setTmdbMovieSelected(false); // Reset TMDB lock
                       setEditingMaster(null);
                       setEditingVariant(null);
                     }}
