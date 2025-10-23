@@ -536,14 +536,14 @@ export default function VHSCollectionTracker() {
       // Add to collection or wishlist
       if (addToWishlist) {
         const { error: wishlistError } = await supabase
-          .from('wishlist')
-          .insert([{ user_id: user.id, variant_id: variant.id }]);
+          .from('user_wishlists')
+          .insert([{ user_id: user.id, master_id: masterId, variant_id: variant.id }]);
 
         if (wishlistError) throw wishlistError;
       } else {
         const { error: collectionError } = await supabase
-          .from('user_collection')
-          .insert([{ user_id: user.id, variant_id: variant.id }]);
+          .from('user_collections')
+          .insert([{ user_id: user.id, master_id: masterId, variant_id: variant.id }]);
 
         if (collectionError) throw collectionError;
       }
