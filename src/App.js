@@ -1033,27 +1033,35 @@ export default function VHSCollectionTracker() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-purple-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="sticky top-0 z-40 bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-600 text-white shadow-2xl border-b-4 border-orange-500">
+        <div className="max-w-7xl mx-auto px-6 py-5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Film className="w-8 h-8" />
-              <h1 className="text-2xl font-bold">VHS Vault</h1>
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <Film className="w-10 h-10 text-orange-400 drop-shadow-lg" />
+                <div className="absolute -inset-1 bg-orange-400 rounded-full opacity-20 blur"></div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-300 via-yellow-200 to-orange-300">
+                  VHS VAULT
+                </h1>
+                <p className="text-xs text-purple-200 font-mono tracking-wider">REWIND • PLAY • COLLECT</p>
+              </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="hidden md:flex items-center space-x-2 bg-purple-700 px-4 py-2 rounded-lg">
-                <User className="w-5 h-5" />
-                <span className="text-sm">{user.email}</span>
+              <div className="hidden md:flex items-center space-x-2 bg-purple-800/50 backdrop-blur-sm px-5 py-2.5 rounded-lg border border-purple-500/30">
+                <User className="w-5 h-5 text-orange-300" />
+                <span className="text-sm font-medium">{user.email}</span>
                 {isAdmin && (
-                  <span className="ml-2 bg-yellow-400 text-purple-900 px-2 py-0.5 rounded text-xs font-bold">
+                  <span className="ml-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-purple-900 px-3 py-1 rounded-full text-xs font-black shadow-lg">
                     ADMIN
                   </span>
                 )}
               </div>
               <button
                 onClick={handleLogout}
-                className="bg-purple-700 hover:bg-purple-800 px-4 py-2 rounded-lg transition flex items-center space-x-2"
+                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 px-5 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2 font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5"
               >
                 <LogOut className="w-5 h-5" />
                 <span>Logout</span>
@@ -1063,8 +1071,8 @@ export default function VHSCollectionTracker() {
         </div>
       </div>
 
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4">
+      <div className="sticky top-[89px] z-30 bg-white shadow-lg border-b-2 border-gray-200">
+        <div className="max-w-7xl mx-auto px-6">
           <div className="flex space-x-2 md:space-x-8 overflow-x-auto">
             {(isAdmin
               ? ['search', 'browse', 'collection', 'wishlist', 'marketplace', 'pending']
@@ -1077,8 +1085,10 @@ export default function VHSCollectionTracker() {
                   setSelectedMaster(null);
                   setSelectedVariant(null);
                 }}
-                className={`py-4 px-2 border-b-2 font-medium transition whitespace-nowrap capitalize ${
-                  view === tab ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                className={`py-5 px-4 border-b-4 font-bold transition-all duration-300 whitespace-nowrap capitalize text-sm tracking-wide ${
+                  view === tab
+                    ? 'border-orange-500 text-purple-700 bg-purple-50'
+                    : 'border-transparent text-gray-500 hover:text-purple-600 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 {tab} {tab === 'collection' && `(${collection.length})`}
@@ -1090,7 +1100,7 @@ export default function VHSCollectionTracker() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-12">
         {view === 'search' && (
           <>
             <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -1125,7 +1135,7 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 {/* Variant Detail Card */}
-                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <div className="bg-white rounded-xl shadow-2xl p-8 mb-8 border border-gray-100">
                   <div className="flex gap-6">
                     {/* Variant Images Gallery */}
                     {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
@@ -1133,7 +1143,7 @@ export default function VHSCollectionTracker() {
                         <img
                           src={selectedVariant.variant_images[0].image_url}
                           alt="Variant cover"
-                          className="w-48 h-72 object-cover rounded shadow-lg cursor-pointer hover:shadow-xl transition"
+                          className="w-48 h-72 object-cover rounded-lg shadow-xl cursor-pointer hover:shadow-2xl hover:-translate-y-2 hover:rotate-2 transition-all duration-300 border-4 border-gray-800"
                           onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), 0)}
                         />
                         {selectedVariant.variant_images.length > 1 && (
@@ -1244,14 +1254,14 @@ export default function VHSCollectionTracker() {
               </div>
             ) : !selectedMaster ? (
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                <h2 className="text-4xl font-bold text-gray-900 mb-8">
                   {searchTerm ? 'Search Results' : 'Top Variants in Collections'}
                 </h2>
-                <div className="grid gap-4">
+                <div className="grid gap-6">
                   {(searchTerm ? filteredMasters : topReleases).map(master => (
                   <div
                     key={master.id}
-                    className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer"
+                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 cursor-pointer border border-gray-100"
                     onClick={() => setSelectedMaster(master)}
                   >
                     <div className="flex gap-4 items-start">
@@ -1283,14 +1293,25 @@ export default function VHSCollectionTracker() {
                   </div>
                 ))}
                   {(searchTerm ? filteredMasters : topReleases).length === 0 && (
-                    <div className="bg-white rounded-lg shadow p-12 text-center">
-                      <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg">
-                        {searchTerm ? 'No titles found' : 'No popular titles yet'}
+                    <div className="bg-gradient-to-br from-gray-50 to-purple-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-gray-300">
+                      <div className="relative inline-block mb-6">
+                        <Film className="w-24 h-24 text-gray-400 mx-auto" />
+                        <div className="absolute inset-0 bg-gray-400 rounded-full opacity-20 blur-xl"></div>
+                      </div>
+                      <h3 className="text-3xl font-bold text-gray-800 mb-3">
+                        {searchTerm ? 'No Matches Found' : 'No Tapes Yet'}
+                      </h3>
+                      <p className="text-gray-600 text-lg mb-6">
+                        {searchTerm ? 'Try adjusting your search' : 'Be the first to add titles to the vault!'}
                       </p>
-                      <p className="text-gray-500 mt-2">
-                        {searchTerm ? 'Try a different search' : 'Be the first to add titles to your collection!'}
-                      </p>
+                      {!searchTerm && (
+                        <button
+                          onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
+                          className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                        >
+                          Add First Title
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1389,7 +1410,7 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-gray-800">Variants ({selectedMaster.variants?.filter(v => v.approved).length || 0})</h3>
+                  <h3 className="text-2xl font-bold text-gray-900">Variants ({selectedMaster.variants?.filter(v => v.approved).length || 0})</h3>
                   <button
                     onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition flex items-center space-x-2"
@@ -1404,7 +1425,7 @@ export default function VHSCollectionTracker() {
                     const inColl = isInCollection(variant.id);
                     const inWish = isInWishlist(variant.id);
                     return (
-                      <div key={variant.id} className="bg-white rounded-lg shadow p-6">
+                      <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border border-gray-100">
                         <div className="flex gap-4 items-start">
                           {/* Variant Images - Left Side */}
                           {variant.variant_images && variant.variant_images.length > 0 ? (
@@ -1592,7 +1613,7 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 {/* Variant Detail Card */}
-                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <div className="bg-white rounded-xl shadow-2xl p-8 mb-8 border border-gray-100">
                   <div className="flex gap-6">
                     {/* Variant Images Gallery */}
                     {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
@@ -1600,7 +1621,7 @@ export default function VHSCollectionTracker() {
                         <img
                           src={selectedVariant.variant_images[0].image_url}
                           alt="Variant cover"
-                          className="w-48 h-72 object-cover rounded shadow-lg cursor-pointer hover:shadow-xl transition"
+                          className="w-48 h-72 object-cover rounded-lg shadow-xl cursor-pointer hover:shadow-2xl hover:-translate-y-2 hover:rotate-2 transition-all duration-300 border-4 border-gray-800"
                           onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), 0)}
                         />
                         {selectedVariant.variant_images.length > 1 && (
@@ -1746,10 +1767,19 @@ export default function VHSCollectionTracker() {
                   </div>
                 ))}
                 {filteredMasters.length === 0 && (
-                  <div className="bg-white rounded-lg shadow p-12 text-center">
-                    <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg">No titles found</p>
-                    <p className="text-gray-500 mt-2">Try a different search or add a new title</p>
+                  <div className="bg-gradient-to-br from-gray-50 to-purple-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-gray-300">
+                    <div className="relative inline-block mb-6">
+                      <Film className="w-24 h-24 text-gray-400 mx-auto" />
+                      <div className="absolute inset-0 bg-gray-400 rounded-full opacity-20 blur-xl"></div>
+                    </div>
+                    <h3 className="text-3xl font-bold text-gray-800 mb-3">No Titles Found</h3>
+                    <p className="text-gray-600 text-lg mb-6">Try a different search or add a new title</p>
+                    <button
+                      onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
+                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                    >
+                      Add New Title
+                    </button>
                   </div>
                 )}
               </div>
@@ -1846,7 +1876,7 @@ export default function VHSCollectionTracker() {
                       const inColl = isInCollection(variant.id);
                       const inWish = isInWishlist(variant.id);
                       return (
-                        <div key={variant.id} className="bg-white rounded-lg shadow p-6">
+                        <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border border-gray-100">
                           <div className="flex gap-4 items-start">
                             {/* Variant Images - Left Side */}
                             {variant.variant_images && variant.variant_images.length > 0 ? (
@@ -2001,12 +2031,21 @@ export default function VHSCollectionTracker() {
 
         {view === 'collection' && (
           <>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">My Collection</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-8">My Collection</h2>
             {collection.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-12 text-center">
-                <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">Your collection is empty</p>
-                <p className="text-gray-500 mt-2">Browse the database to add tapes</p>
+              <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
+                <div className="relative inline-block mb-6">
+                  <Film className="w-24 h-24 text-purple-400 mx-auto" />
+                  <div className="absolute inset-0 bg-purple-400 rounded-full opacity-20 blur-xl"></div>
+                </div>
+                <h3 className="text-3xl font-bold text-gray-800 mb-3">Your Vault is Empty!</h3>
+                <p className="text-gray-600 text-lg mb-6">Time to start building your VHS empire</p>
+                <button
+                  onClick={() => setView('search')}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                >
+                  Browse Tapes
+                </button>
               </div>
             ) : (
               <div className="grid gap-4">
@@ -2104,12 +2143,21 @@ export default function VHSCollectionTracker() {
 
         {view === 'wishlist' && (
           <>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">My Wishlist</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-8">My Wishlist</h2>
             {wishlist.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-12 text-center">
-                <Heart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">Your wishlist is empty</p>
-                <p className="text-gray-500 mt-2">Add tapes you want to find</p>
+              <div className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-pink-300">
+                <div className="relative inline-block mb-6">
+                  <Heart className="w-24 h-24 text-pink-400 mx-auto" />
+                  <div className="absolute inset-0 bg-pink-400 rounded-full opacity-20 blur-xl"></div>
+                </div>
+                <h3 className="text-3xl font-bold text-gray-800 mb-3">No Wishlist Items Yet</h3>
+                <p className="text-gray-600 text-lg mb-6">Start building your dream collection</p>
+                <button
+                  onClick={() => setView('search')}
+                  className="bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                >
+                  Find Tapes
+                </button>
               </div>
             ) : (
               <div className="grid gap-4">
