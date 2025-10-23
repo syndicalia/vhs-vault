@@ -1393,6 +1393,52 @@ export default function VHSCollectionTracker() {
                               <p className="text-gray-600 italic">{selectedVariant.notes}</p>
                             </div>
                           )}
+
+                          {/* Advanced Fields - Only show if filled */}
+                          {(selectedVariant.edition_type || selectedVariant.audio_language || selectedVariant.subtitles ||
+                            selectedVariant.rating || selectedVariant.aspect_ratio || selectedVariant.shell_color) && (
+                            <div className="md:col-span-2 border-t pt-4 mt-2">
+                              <p className="text-sm font-semibold text-gray-700 mb-3">Advanced Details</p>
+                              <div className="grid md:grid-cols-2 gap-4">
+                                {selectedVariant.edition_type && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Edition Type</p>
+                                    <p className="text-gray-700">{selectedVariant.edition_type}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.audio_language && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Audio Language</p>
+                                    <p className="text-gray-700">{selectedVariant.audio_language}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.subtitles && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Subtitles</p>
+                                    <p className="text-gray-700">{selectedVariant.subtitles}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.rating && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Rating</p>
+                                    <p className="text-gray-700">{selectedVariant.rating}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.aspect_ratio && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Aspect Ratio</p>
+                                    <p className="text-gray-700">{selectedVariant.aspect_ratio}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.shell_color && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Shell Color</p>
+                                    <p className="text-gray-700">{selectedVariant.shell_color}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1960,6 +2006,52 @@ export default function VHSCollectionTracker() {
                               <p className="text-gray-600 italic">{selectedVariant.notes}</p>
                             </div>
                           )}
+
+                          {/* Advanced Fields - Only show if filled */}
+                          {(selectedVariant.edition_type || selectedVariant.audio_language || selectedVariant.subtitles ||
+                            selectedVariant.rating || selectedVariant.aspect_ratio || selectedVariant.shell_color) && (
+                            <div className="md:col-span-2 border-t pt-4 mt-2">
+                              <p className="text-sm font-semibold text-gray-700 mb-3">Advanced Details</p>
+                              <div className="grid md:grid-cols-2 gap-4">
+                                {selectedVariant.edition_type && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Edition Type</p>
+                                    <p className="text-gray-700">{selectedVariant.edition_type}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.audio_language && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Audio Language</p>
+                                    <p className="text-gray-700">{selectedVariant.audio_language}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.subtitles && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Subtitles</p>
+                                    <p className="text-gray-700">{selectedVariant.subtitles}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.rating && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Rating</p>
+                                    <p className="text-gray-700">{selectedVariant.rating}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.aspect_ratio && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Aspect Ratio</p>
+                                    <p className="text-gray-700">{selectedVariant.aspect_ratio}</p>
+                                  </div>
+                                )}
+                                {selectedVariant.shell_color && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500">Shell Color</p>
+                                    <p className="text-gray-700">{selectedVariant.shell_color}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -2006,9 +2098,21 @@ export default function VHSCollectionTracker() {
                 {filteredMasters.map(master => (
                   <div
                     key={master.id}
-                    className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer"
+                    className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer relative"
                     onClick={() => setSelectedMaster(master)}
                   >
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteMasterRelease(master.id);
+                        }}
+                        className="absolute top-4 right-4 p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center space-x-1"
+                        title="Delete Master Release"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                     <div className="flex gap-4 items-start">
                       {master.poster_url ? (
                         <img
