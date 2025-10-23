@@ -524,17 +524,17 @@ const updateMasterRelease = async () => {
       preview: URL.createObjectURL(file)
     }));
 
-    setNewSubmission({
-      ...newSubmission,
-      imageFiles: [...newSubmission.imageFiles, ...filesWithPreviews]
-    });
+    setNewSubmission(prev => ({
+      ...prev,
+      imageFiles: [...prev.imageFiles, ...filesWithPreviews]
+    }));
   };
 
   const removeImage = (index) => {
     const newFiles = [...newSubmission.imageFiles];
     URL.revokeObjectURL(newFiles[index].preview);
     newFiles.splice(index, 1);
-    setNewSubmission({ ...newSubmission, imageFiles: newFiles });
+    setNewSubmission(prev => ({ ...prev, imageFiles: newFiles }));
   };
 
   const uploadImages = async (variantId) => {
@@ -670,32 +670,33 @@ const selectTMDBMovie = async (movie) => {
       `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${process.env.REACT_APP_TMDB_API_KEY}&append_to_response=credits`
     );
     const details = await response.json();
-    
+
     // Get director from credits
     const director = details.credits?.crew?.find(person => person.job === 'Director');
-    
+
     // Get primary genre
     const genre = details.genres?.[0]?.name || '';
-    
+
     // Get production company
     const studio = details.production_companies?.[0]?.name || '';
-    
+
     // Get poster (full size)
-    const posterUrl = details.poster_path 
+    const posterUrl = details.poster_path
       ? `https://image.tmdb.org/t/p/w500${details.poster_path}`
       : '';
-    
-    // Pre-fill the form
-    setNewSubmission({
-      ...newSubmission,
+
+    // Pre-fill the form with functional state update
+    setNewSubmission(prev => ({
+      ...prev,
       masterTitle: details.title || movie.title,
       year: details.release_date ? details.release_date.split('-')[0] : '',
       director: director?.name || '',
       studio: studio,
       genre: genre,
       posterUrl: posterUrl
-    });
-    
+    }));
+
+    // Close TMDB modal and open submission form
     setShowTMDBModal(false);
     setShowSubmitModal(true);
     setSubmitType('master');
@@ -1393,7 +1394,7 @@ const selectTMDBMovie = async (movie) => {
           </>
         )}
       </div>
-{showTMDBModal && (
+      {showTMDBModal && (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
     <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
       <div className="p-6">
@@ -1472,7 +1473,7 @@ const selectTMDBMovie = async (movie) => {
       </div>
     </div>
   </div>
-)}
+      )}
       {showSubmitModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -1497,7 +1498,7 @@ const selectTMDBMovie = async (movie) => {
                       <input
                         type="text"
                         value={newSubmission.masterTitle}
-                        onChange={(e) => setNewSubmission({...newSubmission, masterTitle: e.target.value})}
+                        onChange={(e) => setNewSubmission(prev => ({...prev, masterTitle: e.target.value}))}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         placeholder="Enter movie title"
                       />
@@ -1508,7 +1509,7 @@ const selectTMDBMovie = async (movie) => {
                         <input
                           type="text"
                           value={newSubmission.year}
-                          onChange={(e) => setNewSubmission({...newSubmission, year: e.target.value})}
+                          onChange={(e) => setNewSubmission(prev => ({...prev, year: e.target.value}))}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                           placeholder="1999"
                         />
@@ -1518,7 +1519,7 @@ const selectTMDBMovie = async (movie) => {
                         <input
                           type="text"
                           value={newSubmission.genre}
-                          onChange={(e) => setNewSubmission({...newSubmission, genre: e.target.value})}
+                          onChange={(e) => setNewSubmission(prev => ({...prev, genre: e.target.value}))}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                           placeholder="Action, Drama, etc."
                         />
@@ -1529,7 +1530,7 @@ const selectTMDBMovie = async (movie) => {
                       <input
                         type="text"
                         value={newSubmission.director}
-                        onChange={(e) => setNewSubmission({...newSubmission, director: e.target.value})}
+                        onChange={(e) => setNewSubmission(prev => ({...prev, director: e.target.value}))}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         placeholder="Director name"
                       />
@@ -1539,7 +1540,7 @@ const selectTMDBMovie = async (movie) => {
                       <input
                         type="text"
                         value={newSubmission.studio}
-                        onChange={(e) => setNewSubmission({...newSubmission, studio: e.target.value})}
+                        onChange={(e) => setNewSubmission(prev => ({...prev, studio: e.target.value}))}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         placeholder="Production studio"
                       />
@@ -1558,7 +1559,7 @@ const selectTMDBMovie = async (movie) => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
                         <select
                           value={newSubmission.variantFormat}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantFormat: e.target.value})}
+                          onChange={(e) => setNewSubmission(prev => ({...prev, variantFormat: e.target.value}))}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         >
                           <option>VHS</option>
@@ -1571,7 +1572,7 @@ const selectTMDBMovie = async (movie) => {
                         <input
                           type="text"
                           value={newSubmission.variantRegion}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantRegion: e.target.value})}
+                          onChange={(e) => setNewSubmission(prev => ({...prev, variantRegion: e.target.value}))}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                           placeholder="NTSC (USA), PAL (UK), etc."
                         />
@@ -1583,7 +1584,7 @@ const selectTMDBMovie = async (movie) => {
                         <input
                           type="text"
                           value={newSubmission.variantRelease}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantRelease: e.target.value})}
+                          onChange={(e) => setNewSubmission(prev => ({...prev, variantRelease: e.target.value}))}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                           placeholder="1999"
                         />
@@ -1593,7 +1594,7 @@ const selectTMDBMovie = async (movie) => {
                         <input
                           type="text"
                           value={newSubmission.variantPackaging}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantPackaging: e.target.value})}
+                          onChange={(e) => setNewSubmission(prev => ({...prev, variantPackaging: e.target.value}))}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                           placeholder="Clamshell, Slipcover, etc."
                         />
@@ -1604,7 +1605,7 @@ const selectTMDBMovie = async (movie) => {
                       <input
                         type="text"
                         value={newSubmission.variantBarcode}
-                        onChange={(e) => setNewSubmission({...newSubmission, variantBarcode: e.target.value})}
+                        onChange={(e) => setNewSubmission(prev => ({...prev, variantBarcode: e.target.value}))}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         placeholder="Enter barcode number"
                       />
@@ -1613,7 +1614,7 @@ const selectTMDBMovie = async (movie) => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
                       <textarea
                         value={newSubmission.variantNotes}
-                        onChange={(e) => setNewSubmission({...newSubmission, variantNotes: e.target.value})}
+                        onChange={(e) => setNewSubmission(prev => ({...prev, variantNotes: e.target.value}))}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         rows="3"
                         placeholder="Special edition notes, condition, etc."
@@ -1820,8 +1821,8 @@ const selectTMDBMovie = async (movie) => {
       </div>
     </div>
   </div>
-)}
-{editingMaster && (
+      )}
+      {editingMaster && (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
     <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
       <div className="p-6">
@@ -1857,15 +1858,13 @@ const selectTMDBMovie = async (movie) => {
       placeholder="https://..."
     />
     {editingMaster.poster_url && (
-      <img 
-        src={editingMaster.poster_url} 
+      <img
+        src={editingMaster.poster_url}
         alt="Poster preview"
         className="mt-2 w-32 h-48 object-cover rounded border"
       />
     )}
   </div>
-            />
-          </div>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
@@ -1930,11 +1929,11 @@ const selectTMDBMovie = async (movie) => {
             </button>
           </div>
         </div>
-       </div>
+      </div>
+    </div>
   </div>
-);
-}
-    {lightboxImage && (
+      )}
+      {lightboxImage && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 z-50"
           onClick={() => setLightboxImage(null)}
@@ -1954,10 +1953,7 @@ const selectTMDBMovie = async (movie) => {
             />
           </div>
         </div>
-      )}</div>
+      )}
+    </div>
   );
-}
-)}
-  </div>  // <-- This closes the main <div className="min-h-screen bg-gray-50">
-);
 }
