@@ -32,9 +32,20 @@ export default function VHSCollectionTracker() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [editingVariant, setEditingVariant] = useState(null);
   const [editingMaster, setEditingMaster] = useState(null);
-  const [tmdbSearchResults, setTmdbSearchResults] = useState([]);
-  const [showTmdbDropdown, setShowTmdbDropdown] = useState(false);
-  const [tmdbSearchTimeout, setTmdbSearchTimeout] = useState(null);
+  // TMDB search state for Search view
+  const [searchTmdbResults, setSearchTmdbResults] = useState([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [searchTmdbTimeout, setSearchTmdbTimeout] = useState(null);
+
+  // TMDB search state for Browse view
+  const [browseTmdbResults, setBrowseTmdbResults] = useState([]);
+  const [showBrowseDropdown, setShowBrowseDropdown] = useState(false);
+  const [browseTmdbTimeout, setBrowseTmdbTimeout] = useState(null);
+
+  // TMDB search state for Modal
+  const [modalTmdbResults, setModalTmdbResults] = useState([]);
+  const [showModalDropdown, setShowModalDropdown] = useState(false);
+  const [modalTmdbTimeout, setModalTmdbTimeout] = useState(null);
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -85,16 +96,25 @@ export default function VHSCollectionTracker() {
   }, [isAdmin]);
 
   useEffect(() => {
-    // Close TMDB dropdown when clicking outside
+    // Close TMDB dropdowns when clicking outside
     const handleClickOutside = (event) => {
-      if (showTmdbDropdown && !event.target.closest('.tmdb-search-container')) {
-        setShowTmdbDropdown(false);
+      // Close search view dropdown if clicking outside
+      if (showSearchDropdown && !event.target.closest('.search-tmdb-search-container')) {
+        setShowSearchDropdown(false);
+      }
+      // Close browse view dropdown if clicking outside
+      if (showBrowseDropdown && !event.target.closest('.browse-tmdb-search-container')) {
+        setShowBrowseDropdown(false);
+      }
+      // Close modal dropdown if clicking outside
+      if (showModalDropdown && !event.target.closest('.modal-tmdb-search-container')) {
+        setShowModalDropdown(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showTmdbDropdown]);
+  }, [showSearchDropdown, showBrowseDropdown, showModalDropdown]);
 
   const checkAdminStatus = async () => {
     const { data, error } = await supabase.auth.getUser();
@@ -254,16 +274,17 @@ export default function VHSCollectionTracker() {
     }
   };
 
-  const handleTitleSearch = async (searchQuery) => {
+  // Search handler for Search view
+  const handleSearchTitleSearch = async (searchQuery) => {
     if (!searchQuery || searchQuery.length < 2) {
-      setTmdbSearchResults([]);
-      setShowTmdbDropdown(false);
+      setSearchTmdbResults([]);
+      setShowSearchDropdown(false);
       return;
     }
 
     // Clear existing timeout
-    if (tmdbSearchTimeout) {
-      clearTimeout(tmdbSearchTimeout);
+    if (searchTmdbTimeout) {
+      clearTimeout(searchTmdbTimeout);
     }
 
     // Set new timeout for debouncing
@@ -275,15 +296,81 @@ export default function VHSCollectionTracker() {
         const data = await response.json();
 
         if (data.results) {
-          setTmdbSearchResults(data.results.slice(0, 10)); // Limit to 10 results
-          setShowTmdbDropdown(true);
+          setSearchTmdbResults(data.results.slice(0, 10)); // Limit to 10 results
+          setShowSearchDropdown(true);
         }
       } catch (error) {
         console.error('TMDB search error:', error);
       }
     }, 300); // 300ms debounce
 
-    setTmdbSearchTimeout(timeout);
+    setSearchTmdbTimeout(timeout);
+  };
+
+  // Separate search handler for Browse view
+  const handleBrowseTitleSearch = async (searchQuery) => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setBrowseTmdbResults([]);
+      setShowBrowseDropdown(false);
+      return;
+    }
+
+    // Clear existing timeout
+    if (browseTmdbTimeout) {
+      clearTimeout(browseTmdbTimeout);
+    }
+
+    // Set new timeout for debouncing
+    const timeout = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}`
+        );
+        const data = await response.json();
+
+        if (data.results) {
+          setBrowseTmdbResults(data.results.slice(0, 10)); // Limit to 10 results
+          setShowBrowseDropdown(true);
+        }
+      } catch (error) {
+        console.error('TMDB search error:', error);
+      }
+    }, 300); // 300ms debounce
+
+    setBrowseTmdbTimeout(timeout);
+  };
+
+  // Search handler for Modal
+  const handleModalTitleSearch = async (searchQuery) => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setModalTmdbResults([]);
+      setShowModalDropdown(false);
+      return;
+    }
+
+    // Clear existing timeout
+    if (modalTmdbTimeout) {
+      clearTimeout(modalTmdbTimeout);
+    }
+
+    // Set new timeout for debouncing
+    const timeout = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}`
+        );
+        const data = await response.json();
+
+        if (data.results) {
+          setModalTmdbResults(data.results.slice(0, 10)); // Limit to 10 results
+          setShowModalDropdown(true);
+        }
+      } catch (error) {
+        console.error('TMDB search error:', error);
+      }
+    }, 300); // 300ms debounce
+
+    setModalTmdbTimeout(timeout);
   };
 
   const selectTmdbMovie = async (movie) => {
@@ -321,8 +408,8 @@ export default function VHSCollectionTracker() {
         studio: studio,
         genre: genres
       });
-      setShowTmdbDropdown(false);
-      setTmdbSearchResults([]);
+      setShowModalDropdown(false);
+      setModalTmdbResults([]);
     } catch (error) {
       console.error('Error fetching TMDB details:', error);
       // Fallback to basic info if detailed fetch fails
@@ -331,8 +418,8 @@ export default function VHSCollectionTracker() {
         masterTitle: movie.title,
         year: movie.release_date ? movie.release_date.substring(0, 4) : '',
       });
-      setShowTmdbDropdown(false);
-      setTmdbSearchResults([]);
+      setShowModalDropdown(false);
+      setModalTmdbResults([]);
     }
   };
 
@@ -1061,7 +1148,7 @@ export default function VHSCollectionTracker() {
         {view === 'search' && (
           <>
             <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <div className="relative flex-1">
+              <div className="relative flex-1 search-tmdb-search-container">
                 <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
@@ -1069,23 +1156,24 @@ export default function VHSCollectionTracker() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setSearchTerm(value);
-                    handleTitleSearch(value);
+                    handleSearchTitleSearch(value);
                   }}
                   onFocus={() => {
-                    if (tmdbSearchResults.length > 0) {
-                      setShowTmdbDropdown(true);
+                    if (searchTmdbResults.length > 0) {
+                      setShowSearchDropdown(true);
                     }
                   }}
                   placeholder="Search for movies on TMDB..."
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   autoComplete="off"
                 />
-                {showTmdbDropdown && tmdbSearchResults.length > 0 && (
+                {showSearchDropdown && searchTmdbResults.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-96 overflow-y-auto">
-                    {tmdbSearchResults.map((movie) => (
+                    {searchTmdbResults.map((movie) => (
                       <div
                         key={movie.id}
-                        onClick={async (e) => {
+                        onMouseDown={async (e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           console.log('Movie clicked:', movie.title);
 
@@ -1135,8 +1223,8 @@ export default function VHSCollectionTracker() {
                             });
 
                             // Close dropdown and open modal
-                            setShowTmdbDropdown(false);
-                            setTmdbSearchResults([]);
+                            setShowSearchDropdown(false);
+                            setSearchTmdbResults([]);
                             setSearchTerm('');
                             setSubmitType('master');
                             setShowSubmitModal(true);
@@ -1626,7 +1714,7 @@ export default function VHSCollectionTracker() {
         {view === 'browse' && (
           <>
             <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <div className="relative flex-1 tmdb-search-container">
+              <div className="relative flex-1 browse-tmdb-search-container">
                 <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
@@ -1634,23 +1722,24 @@ export default function VHSCollectionTracker() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setSearchTerm(value);
-                    handleTitleSearch(value);
+                    handleBrowseTitleSearch(value);
                   }}
                   onFocus={() => {
-                    if (tmdbSearchResults.length > 0) {
-                      setShowTmdbDropdown(true);
+                    if (browseTmdbResults.length > 0) {
+                      setShowBrowseDropdown(true);
                     }
                   }}
                   placeholder="Search for movies on TMDB..."
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   autoComplete="off"
                 />
-                {showTmdbDropdown && tmdbSearchResults.length > 0 && (
+                {showBrowseDropdown && browseTmdbResults.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-96 overflow-y-auto">
-                    {tmdbSearchResults.map((movie) => (
+                    {browseTmdbResults.map((movie) => (
                       <div
                         key={movie.id}
-                        onClick={async (e) => {
+                        onMouseDown={async (e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           console.log('Movie clicked:', movie.title);
 
@@ -1700,8 +1789,8 @@ export default function VHSCollectionTracker() {
                             });
 
                             // Close dropdown and open modal
-                            setShowTmdbDropdown(false);
-                            setTmdbSearchResults([]);
+                            setShowBrowseDropdown(false);
+                            setBrowseTmdbResults([]);
                             setSearchTerm('');
                             setSubmitType('master');
                             setShowSubmitModal(true);
@@ -2526,7 +2615,7 @@ export default function VHSCollectionTracker() {
               <div className="space-y-4">
                 {submitType === 'master' && (
                   <>
-                    <div className="relative tmdb-search-container">
+                    <div className="relative modal-tmdb-search-container">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
                       <input
                         type="text"
@@ -2534,20 +2623,20 @@ export default function VHSCollectionTracker() {
                         onChange={(e) => {
                           const value = e.target.value;
                           setNewSubmission({...newSubmission, masterTitle: value});
-                          handleTitleSearch(value);
+                          handleModalTitleSearch(value);
                         }}
                         onFocus={() => {
-                          if (tmdbSearchResults.length > 0) {
-                            setShowTmdbDropdown(true);
+                          if (modalTmdbResults.length > 0) {
+                            setShowModalDropdown(true);
                           }
                         }}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         placeholder="Search for movie on TMDB..."
                         autoComplete="off"
                       />
-                      {showTmdbDropdown && tmdbSearchResults.length > 0 && (
+                      {showModalDropdown && modalTmdbResults.length > 0 && (
                         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-96 overflow-y-auto">
-                          {tmdbSearchResults.map((movie) => (
+                          {modalTmdbResults.map((movie) => (
                             <div
                               key={movie.id}
                               onClick={() => selectTmdbMovie(movie)}
