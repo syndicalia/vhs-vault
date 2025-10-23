@@ -440,6 +440,134 @@ export default function VHSCollectionTracker() {
     }
   };
 
+  const handleQuickAdd = async (movie, addToWishlist = false) => {
+    if (!user) {
+      toast.error('Please sign in to add items to your collection!');
+      return;
+    }
+
+    try {
+      toast.loading('Adding to your ' + (addToWishlist ? 'wishlist' : 'collection') + '...');
+
+      // Fetch full movie details
+      const response = await fetch(
+        `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+      );
+      const details = await response.json();
+
+      // Extract director
+      let director = '';
+      if (details.credits && details.credits.crew) {
+        const directorObj = details.credits.crew.find(person => person.job === 'Director');
+        director = directorObj ? directorObj.name : '';
+      }
+
+      // Extract studio
+      let studio = '';
+      if (details.production_companies && details.production_companies.length > 0) {
+        studio = details.production_companies[0].name;
+      }
+
+      // Extract genres
+      let genres = '';
+      if (details.genres && details.genres.length > 0) {
+        genres = details.genres.map(g => g.name).join(', ');
+      }
+
+      // Check if master already exists
+      const { data: existingMaster } = await supabase
+        .from('master_releases')
+        .select('id')
+        .eq('title', movie.title)
+        .eq('year', movie.release_date ? movie.release_date.substring(0, 4) : '')
+        .single();
+
+      let masterId;
+
+      if (existingMaster) {
+        masterId = existingMaster.id;
+      } else {
+        // Create new master release
+        const posterUrl = await searchTMDB(movie.title, movie.release_date ? movie.release_date.substring(0, 4) : '');
+
+        const { data: newMaster, error: masterError } = await supabase
+          .from('master_releases')
+          .insert([{
+            title: movie.title,
+            year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+            director: director,
+            studio: studio,
+            genre: genres,
+            poster_url: posterUrl
+          }])
+          .select()
+          .single();
+
+        if (masterError) throw masterError;
+        masterId = newMaster.id;
+      }
+
+      // Create minimal variant
+      const { data: variant, error: variantError } = await supabase
+        .from('variants')
+        .insert([{
+          master_id: masterId,
+          format: 'VHS',
+          region: 'NTSC (USA)', // Default region
+          release_year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+          packaging: 'Other', // Default packaging
+          notes: 'Quick add - details TBD',
+          barcode: '',
+          condition: '',
+          edition_type: null,
+          audio_language: null,
+          subtitles: null,
+          rating: null,
+          aspect_ratio: null,
+          shell_color: null,
+          submitted_by: user.id,
+          approved: true // Auto-approve quick adds
+        }])
+        .select()
+        .single();
+
+      if (variantError) throw variantError;
+
+      // Add to collection or wishlist
+      if (addToWishlist) {
+        const { error: wishlistError } = await supabase
+          .from('wishlist')
+          .insert([{ user_id: user.id, variant_id: variant.id }]);
+
+        if (wishlistError) throw wishlistError;
+      } else {
+        const { error: collectionError } = await supabase
+          .from('user_collection')
+          .insert([{ user_id: user.id, variant_id: variant.id }]);
+
+        if (collectionError) throw collectionError;
+      }
+
+      toast.dismiss();
+      toast.success(`${movie.title} added to your ${addToWishlist ? 'wishlist' : 'collection'}!`);
+
+      // Reload data
+      loadAllData();
+
+      // Clear search
+      setSearchTerm('');
+      setShowSearchDropdown(false);
+      setSearchTmdbResults([]);
+      setShowBrowseDropdown(false);
+      setBrowseTmdbResults([]);
+
+    } catch (error) {
+      toast.dismiss();
+      toast.error('Error adding item: ' + error.message);
+      console.error('Quick add error:', error);
+    }
+  };
+
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -1214,89 +1342,117 @@ export default function VHSCollectionTracker() {
                     {searchTmdbResults.map((movie) => (
                       <div
                         key={movie.id}
-                        onMouseDown={async (e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          console.log('Movie clicked:', movie.title);
-
-                          // Fetch full movie details from TMDB
-                          try {
-                            const response = await fetch(
-                              `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
-                            );
-                            const details = await response.json();
-
-                            // Extract director
-                            let director = '';
-                            if (details.credits && details.credits.crew) {
-                              const directorObj = details.credits.crew.find(person => person.job === 'Director');
-                              director = directorObj ? directorObj.name : '';
-                            }
-
-                            // Extract studio
-                            let studio = '';
-                            if (details.production_companies && details.production_companies.length > 0) {
-                              studio = details.production_companies[0].name;
-                            }
-
-                            // Extract genres
-                            let genres = '';
-                            if (details.genres && details.genres.length > 0) {
-                              genres = details.genres.map(g => g.name).join(', ');
-                            }
-
-                            // Update form with TMDB data
-                            setNewSubmission({
-                              masterTitle: movie.title,
-                              year: movie.release_date ? movie.release_date.substring(0, 4) : '',
-                              director: director,
-                              studio: studio,
-                              genre: genres,
-                              variantFormat: 'VHS',
-                              variantRegion: '',
-                              variantRelease: '',
-                              variantPackaging: '',
-                              variantNotes: '',
-                              variantBarcode: '',
-                              variantCondition: '',
-                              imageCover: null,
-                              imageBack: null,
-                              imageSpine: null,
-                              imageTapeLabel: null
-                            });
-
-                            // Close dropdown and open modal
-                            setShowSearchDropdown(false);
-                            setSearchTmdbResults([]);
-                            setSearchTerm('');
-                            setSubmitType('master');
-                            setTmdbMovieSelected(true); // Lock auto-filled fields
-                            setShowSubmitModal(true);
-
-                            console.log('Modal should be open now');
-                          } catch (error) {
-                            console.error('Error fetching TMDB details:', error);
-                            alert('Error loading movie details. Please try again.');
-                          }
-                        }}
-                        className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        className="flex items-center p-3 hover:bg-purple-50 border-b border-gray-100 last:border-b-0"
                       >
-                        {movie.poster_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
-                            alt={movie.title}
-                            className="w-12 h-18 object-cover rounded mr-3 flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-12 h-18 bg-gray-200 rounded mr-3 flex-shrink-0 flex items-center justify-center">
-                            <Film className="w-6 h-6 text-gray-400" />
+                        <div
+                          onMouseDown={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log('Movie clicked:', movie.title);
+
+                            // Fetch full movie details from TMDB
+                            try {
+                              const response = await fetch(
+                                `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+                              );
+                              const details = await response.json();
+
+                              // Extract director
+                              let director = '';
+                              if (details.credits && details.credits.crew) {
+                                const directorObj = details.credits.crew.find(person => person.job === 'Director');
+                                director = directorObj ? directorObj.name : '';
+                              }
+
+                              // Extract studio
+                              let studio = '';
+                              if (details.production_companies && details.production_companies.length > 0) {
+                                studio = details.production_companies[0].name;
+                              }
+
+                              // Extract genres
+                              let genres = '';
+                              if (details.genres && details.genres.length > 0) {
+                                genres = details.genres.map(g => g.name).join(', ');
+                              }
+
+                              // Update form with TMDB data
+                              setNewSubmission({
+                                masterTitle: movie.title,
+                                year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+                                director: director,
+                                studio: studio,
+                                genre: genres,
+                                variantFormat: 'VHS',
+                                variantRegion: '',
+                                variantRelease: '',
+                                variantPackaging: '',
+                                variantNotes: '',
+                                variantBarcode: '',
+                                variantCondition: '',
+                                imageCover: null,
+                                imageBack: null,
+                                imageSpine: null,
+                                imageTapeLabel: null
+                              });
+
+                              // Close dropdown and open modal
+                              setShowSearchDropdown(false);
+                              setSearchTmdbResults([]);
+                              setSearchTerm('');
+                              setSubmitType('master');
+                              setTmdbMovieSelected(true); // Lock auto-filled fields
+                              setShowSubmitModal(true);
+
+                              console.log('Modal should be open now');
+                            } catch (error) {
+                              console.error('Error fetching TMDB details:', error);
+                              alert('Error loading movie details. Please try again.');
+                            }
+                          }}
+                          className="flex items-center flex-1 cursor-pointer"
+                        >
+                          {movie.poster_path ? (
+                            <img
+                              src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
+                              alt={movie.title}
+                              className="w-12 h-18 object-cover rounded mr-3 flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-18 bg-gray-200 rounded mr-3 flex-shrink-0 flex items-center justify-center">
+                              <Film className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-medium text-gray-800">{movie.title}</div>
+                            <div className="text-sm text-gray-500">
+                              {movie.release_date ? movie.release_date.substring(0, 4) : 'Unknown'}
+                            </div>
                           </div>
-                        )}
-                        <div>
-                          <div className="font-medium text-gray-800">{movie.title}</div>
-                          <div className="text-sm text-gray-500">
-                            {movie.release_date ? movie.release_date.substring(0, 4) : 'Unknown'}
-                          </div>
+                        </div>
+                        <div className="flex gap-2 ml-3 flex-shrink-0">
+                          <button
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleQuickAdd(movie, false);
+                            }}
+                            className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                            title="Add to Collection"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                          <button
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleQuickAdd(movie, true);
+                            }}
+                            className="p-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition"
+                            title="Add to Wishlist"
+                          >
+                            <Heart className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -1828,89 +1984,117 @@ export default function VHSCollectionTracker() {
                     {browseTmdbResults.map((movie) => (
                       <div
                         key={movie.id}
-                        onMouseDown={async (e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          console.log('Movie clicked:', movie.title);
-
-                          // Fetch full movie details from TMDB
-                          try {
-                            const response = await fetch(
-                              `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
-                            );
-                            const details = await response.json();
-
-                            // Extract director
-                            let director = '';
-                            if (details.credits && details.credits.crew) {
-                              const directorObj = details.credits.crew.find(person => person.job === 'Director');
-                              director = directorObj ? directorObj.name : '';
-                            }
-
-                            // Extract studio
-                            let studio = '';
-                            if (details.production_companies && details.production_companies.length > 0) {
-                              studio = details.production_companies[0].name;
-                            }
-
-                            // Extract genres
-                            let genres = '';
-                            if (details.genres && details.genres.length > 0) {
-                              genres = details.genres.map(g => g.name).join(', ');
-                            }
-
-                            // Update form with TMDB data
-                            setNewSubmission({
-                              masterTitle: movie.title,
-                              year: movie.release_date ? movie.release_date.substring(0, 4) : '',
-                              director: director,
-                              studio: studio,
-                              genre: genres,
-                              variantFormat: 'VHS',
-                              variantRegion: '',
-                              variantRelease: '',
-                              variantPackaging: '',
-                              variantNotes: '',
-                              variantBarcode: '',
-                              variantCondition: '',
-                              imageCover: null,
-                              imageBack: null,
-                              imageSpine: null,
-                              imageTapeLabel: null
-                            });
-
-                            // Close dropdown and open modal
-                            setShowBrowseDropdown(false);
-                            setBrowseTmdbResults([]);
-                            setSearchTerm('');
-                            setSubmitType('master');
-                            setTmdbMovieSelected(true); // Lock auto-filled fields
-                            setShowSubmitModal(true);
-
-                            console.log('Modal should be open now');
-                          } catch (error) {
-                            console.error('Error fetching TMDB details:', error);
-                            alert('Error loading movie details. Please try again.');
-                          }
-                        }}
-                        className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        className="flex items-center p-3 hover:bg-purple-50 border-b border-gray-100 last:border-b-0"
                       >
-                        {movie.poster_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
-                            alt={movie.title}
-                            className="w-12 h-18 object-cover rounded mr-3 flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-12 h-18 bg-gray-200 rounded mr-3 flex-shrink-0 flex items-center justify-center">
-                            <Film className="w-6 h-6 text-gray-400" />
+                        <div
+                          onMouseDown={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log('Movie clicked:', movie.title);
+
+                            // Fetch full movie details from TMDB
+                            try {
+                              const response = await fetch(
+                                `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+                              );
+                              const details = await response.json();
+
+                              // Extract director
+                              let director = '';
+                              if (details.credits && details.credits.crew) {
+                                const directorObj = details.credits.crew.find(person => person.job === 'Director');
+                                director = directorObj ? directorObj.name : '';
+                              }
+
+                              // Extract studio
+                              let studio = '';
+                              if (details.production_companies && details.production_companies.length > 0) {
+                                studio = details.production_companies[0].name;
+                              }
+
+                              // Extract genres
+                              let genres = '';
+                              if (details.genres && details.genres.length > 0) {
+                                genres = details.genres.map(g => g.name).join(', ');
+                              }
+
+                              // Update form with TMDB data
+                              setNewSubmission({
+                                masterTitle: movie.title,
+                                year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+                                director: director,
+                                studio: studio,
+                                genre: genres,
+                                variantFormat: 'VHS',
+                                variantRegion: '',
+                                variantRelease: '',
+                                variantPackaging: '',
+                                variantNotes: '',
+                                variantBarcode: '',
+                                variantCondition: '',
+                                imageCover: null,
+                                imageBack: null,
+                                imageSpine: null,
+                                imageTapeLabel: null
+                              });
+
+                              // Close dropdown and open modal
+                              setShowBrowseDropdown(false);
+                              setBrowseTmdbResults([]);
+                              setSearchTerm('');
+                              setSubmitType('master');
+                              setTmdbMovieSelected(true); // Lock auto-filled fields
+                              setShowSubmitModal(true);
+
+                              console.log('Modal should be open now');
+                            } catch (error) {
+                              console.error('Error fetching TMDB details:', error);
+                              alert('Error loading movie details. Please try again.');
+                            }
+                          }}
+                          className="flex items-center flex-1 cursor-pointer"
+                        >
+                          {movie.poster_path ? (
+                            <img
+                              src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
+                              alt={movie.title}
+                              className="w-12 h-18 object-cover rounded mr-3 flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-18 bg-gray-200 rounded mr-3 flex-shrink-0 flex items-center justify-center">
+                              <Film className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-medium text-gray-800">{movie.title}</div>
+                            <div className="text-sm text-gray-500">
+                              {movie.release_date ? movie.release_date.substring(0, 4) : 'Unknown'}
+                            </div>
                           </div>
-                        )}
-                        <div>
-                          <div className="font-medium text-gray-800">{movie.title}</div>
-                          <div className="text-sm text-gray-500">
-                            {movie.release_date ? movie.release_date.substring(0, 4) : 'Unknown'}
-                          </div>
+                        </div>
+                        <div className="flex gap-2 ml-3 flex-shrink-0">
+                          <button
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleQuickAdd(movie, false);
+                            }}
+                            className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                            title="Add to Collection"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                          <button
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleQuickAdd(movie, true);
+                            }}
+                            className="p-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition"
+                            title="Add to Wishlist"
+                          >
+                            <Heart className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     ))}
