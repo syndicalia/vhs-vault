@@ -44,6 +44,7 @@ export default function VHSCollectionTracker() {
   const [loadingVariants, setLoadingVariants] = useState(false);
   const [tmdbSearching, setTmdbSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -54,9 +55,16 @@ export default function VHSCollectionTracker() {
     variantFormat: 'VHS',
     variantRegion: '',
     variantRelease: '',
-    variantPackaging: '',
+    variantCaseType: '',
     variantNotes: '',
     variantBarcode: '',
+    // Advanced fields
+    editionType: '',
+    audioLanguage: '',
+    subtitles: null,
+    originalRating: '',
+    aspectRatio: '',
+    shellColor: '',
     imageCover: null,
     imageBack: null,
     imageSpine: null,
@@ -809,8 +817,8 @@ export default function VHSCollectionTracker() {
           showToast('Region is required! Please select a region before submitting.', 'error');
           return;
         }
-        if (!newSubmission.variantPackaging) {
-          showToast('Packaging is required! Please select a packaging type before submitting.', 'error');
+        if (!newSubmission.variantCaseType) {
+          showToast('Case Type is required! Please select a case type before submitting.', 'error');
           return;
         }
       }
@@ -825,14 +833,7 @@ export default function VHSCollectionTracker() {
           showToast('Back image is required! Please upload a back image.', 'error');
           return;
         }
-        if (!newSubmission.imageSpine) {
-          showToast('Spine image is required! Please upload a spine image.', 'error');
-          return;
-        }
-        if (!newSubmission.imageTapeLabel) {
-          showToast('Tape Label image is required! Please upload a tape label image.', 'error');
-          return;
-        }
+        // Spine and Tape Label are optional
       }
 
       if (submitType === 'master') {
@@ -888,9 +889,15 @@ export default function VHSCollectionTracker() {
               format: newSubmission.variantFormat,
               region: newSubmission.variantRegion,
               release_year: newSubmission.variantRelease,
-              packaging: newSubmission.variantPackaging,
+              case_type: newSubmission.variantCaseType,
               notes: newSubmission.variantNotes,
               barcode: newSubmission.variantBarcode,
+              edition_type: newSubmission.editionType || null,
+              audio_language: newSubmission.audioLanguage || null,
+              subtitles: newSubmission.subtitles,
+              original_rating: newSubmission.originalRating || null,
+              aspect_ratio: newSubmission.aspectRatio || null,
+              shell_color: newSubmission.shellColor || null,
               submitted_by: user.id,
               approved: false
             }])
@@ -912,9 +919,15 @@ export default function VHSCollectionTracker() {
               format: newSubmission.variantFormat,
               region: newSubmission.variantRegion,
               release_year: newSubmission.variantRelease,
-              packaging: newSubmission.variantPackaging,
+              case_type: newSubmission.variantCaseType,
               notes: newSubmission.variantNotes,
-              barcode: newSubmission.variantBarcode
+              barcode: newSubmission.variantBarcode,
+              edition_type: newSubmission.editionType || null,
+              audio_language: newSubmission.audioLanguage || null,
+              subtitles: newSubmission.subtitles,
+              original_rating: newSubmission.originalRating || null,
+              aspect_ratio: newSubmission.aspectRatio || null,
+              shell_color: newSubmission.shellColor || null
             })
             .eq('id', editingVariant.id);
 
@@ -943,7 +956,7 @@ export default function VHSCollectionTracker() {
               format: newSubmission.variantFormat,
               region: newSubmission.variantRegion,
               release_year: newSubmission.variantRelease,
-              packaging: newSubmission.variantPackaging,
+              case_type: newSubmission.variantCaseType,
               notes: newSubmission.variantNotes,
               barcode: newSubmission.variantBarcode,
               submitted_by: user.id,
@@ -963,7 +976,7 @@ export default function VHSCollectionTracker() {
       setNewSubmission({
         masterTitle: '', year: '', director: '', studio: '', genre: '',
         variantFormat: 'VHS', variantRegion: '', variantRelease: '',
-        variantPackaging: '', variantNotes: '', variantBarcode: '',
+        variantCaseType: '', variantNotes: '', variantBarcode: '',
         imageCover: null, imageBack: null, imageSpine: null, imageTapeLabel: null
       });
 
@@ -1227,7 +1240,7 @@ export default function VHSCollectionTracker() {
                                 variantFormat: 'VHS',
                                 variantRegion: '',
                                 variantRelease: '',
-                                variantPackaging: '',
+                                variantCaseType: '',
                                 variantNotes: '',
                                 variantBarcode: '',
                                 imageCover: null,
@@ -1342,8 +1355,8 @@ export default function VHSCollectionTracker() {
                             <p className="text-gray-600">{selectedVariant.release_year}</p>
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-gray-700">Packaging</p>
-                            <p className="text-gray-600">{selectedVariant.packaging}</p>
+                            <p className="text-sm font-semibold text-gray-700">Case Type</p>
+                            <p className="text-gray-600">{selectedVariant.case_type}</p>
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-gray-700">Barcode</p>
@@ -1363,6 +1376,51 @@ export default function VHSCollectionTracker() {
                             </div>
                           )}
                         </div>
+
+                        {/* Advanced Fields - Only shown if filled out */}
+                        {(selectedVariant.edition_type || selectedVariant.audio_language || selectedVariant.subtitles !== null || selectedVariant.original_rating || selectedVariant.aspect_ratio || selectedVariant.shell_color) && (
+                          <div className="mt-4 pt-4 border-t">
+                            <h4 className="text-md font-bold text-gray-700 mb-3">Advanced Attributes</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {selectedVariant.edition_type && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Edition Type</p>
+                                  <p className="text-gray-600">{selectedVariant.edition_type}</p>
+                                </div>
+                              )}
+                              {selectedVariant.audio_language && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Audio Language</p>
+                                  <p className="text-gray-600">{selectedVariant.audio_language}</p>
+                                </div>
+                              )}
+                              {selectedVariant.subtitles !== null && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Subtitles</p>
+                                  <p className="text-gray-600">{selectedVariant.subtitles ? 'Yes' : 'No'}</p>
+                                </div>
+                              )}
+                              {selectedVariant.original_rating && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Original Rating</p>
+                                  <p className="text-gray-600">{selectedVariant.original_rating}</p>
+                                </div>
+                              )}
+                              {selectedVariant.aspect_ratio && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Aspect Ratio</p>
+                                  <p className="text-gray-600">{selectedVariant.aspect_ratio}</p>
+                                </div>
+                              )}
+                              {selectedVariant.shell_color && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Shell Color</p>
+                                  <p className="text-gray-600">{selectedVariant.shell_color}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Buttons */}
@@ -1658,7 +1716,7 @@ export default function VHSCollectionTracker() {
                               <span className="font-semibold">Release:</span> {variant.release_year}
                             </p>
                             <p className="text-gray-700 mb-1">
-                              <span className="font-semibold">Packaging:</span> {variant.packaging}
+                              <span className="font-semibold">Case Type:</span> {variant.case_type}
                             </p>
                             <p className="text-gray-700 mb-1">
                               <span className="font-semibold">Barcode:</span> {variant.barcode}
@@ -1719,9 +1777,15 @@ export default function VHSCollectionTracker() {
                                       variantFormat: variant.format,
                                       variantRegion: variant.region,
                                       variantRelease: variant.release_year,
-                                      variantPackaging: variant.packaging,
+                                      variantCaseType: variant.case_type,
                                       variantNotes: variant.notes || '',
                                       variantBarcode: variant.barcode || '',
+                                      editionType: variant.edition_type || '',
+                                      audioLanguage: variant.audio_language || '',
+                                      subtitles: variant.subtitles,
+                                      originalRating: variant.original_rating || '',
+                                      aspectRatio: variant.aspect_ratio || '',
+                                      shellColor: variant.shell_color || '',
                                       imageCover: coverImg ? { preview: coverImg.image_url, existing: true } : null,
                                       imageBack: backImg ? { preview: backImg.image_url, existing: true } : null,
                                       imageSpine: spineImg ? { preview: spineImg.image_url, existing: true } : null,
@@ -1846,8 +1910,8 @@ export default function VHSCollectionTracker() {
                             <p className="text-gray-600">{selectedVariant.release_year}</p>
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-gray-700">Packaging</p>
-                            <p className="text-gray-600">{selectedVariant.packaging}</p>
+                            <p className="text-sm font-semibold text-gray-700">Case Type</p>
+                            <p className="text-gray-600">{selectedVariant.case_type}</p>
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-gray-700">Barcode</p>
@@ -1867,6 +1931,51 @@ export default function VHSCollectionTracker() {
                             </div>
                           )}
                         </div>
+
+                        {/* Advanced Fields - Only shown if filled out */}
+                        {(selectedVariant.edition_type || selectedVariant.audio_language || selectedVariant.subtitles !== null || selectedVariant.original_rating || selectedVariant.aspect_ratio || selectedVariant.shell_color) && (
+                          <div className="mt-4 pt-4 border-t">
+                            <h4 className="text-md font-bold text-gray-700 mb-3">Advanced Attributes</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {selectedVariant.edition_type && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Edition Type</p>
+                                  <p className="text-gray-600">{selectedVariant.edition_type}</p>
+                                </div>
+                              )}
+                              {selectedVariant.audio_language && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Audio Language</p>
+                                  <p className="text-gray-600">{selectedVariant.audio_language}</p>
+                                </div>
+                              )}
+                              {selectedVariant.subtitles !== null && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Subtitles</p>
+                                  <p className="text-gray-600">{selectedVariant.subtitles ? 'Yes' : 'No'}</p>
+                                </div>
+                              )}
+                              {selectedVariant.original_rating && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Original Rating</p>
+                                  <p className="text-gray-600">{selectedVariant.original_rating}</p>
+                                </div>
+                              )}
+                              {selectedVariant.aspect_ratio && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Aspect Ratio</p>
+                                  <p className="text-gray-600">{selectedVariant.aspect_ratio}</p>
+                                </div>
+                              )}
+                              {selectedVariant.shell_color && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Shell Color</p>
+                                  <p className="text-gray-600">{selectedVariant.shell_color}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Buttons */}
@@ -1986,7 +2095,7 @@ export default function VHSCollectionTracker() {
                             variantFormat: 'VHS',
                             variantRegion: '',
                             variantRelease: '',
-                            variantPackaging: '',
+                            variantCaseType: '',
                             variantNotes: '',
                             variantBarcode: '',
                             imageCover: null,
@@ -2113,7 +2222,7 @@ export default function VHSCollectionTracker() {
                                 <span className="font-semibold">Release:</span> {variant.release_year}
                               </p>
                               <p className="text-gray-700 mb-1">
-                                <span className="font-semibold">Packaging:</span> {variant.packaging}
+                                <span className="font-semibold">Case Type:</span> {variant.case_type}
                               </p>
                               <p className="text-gray-700 mb-1">
                                 <span className="font-semibold">Barcode:</span> {variant.barcode}
@@ -2172,7 +2281,7 @@ export default function VHSCollectionTracker() {
                                         variantFormat: variant.format,
                                         variantRegion: variant.region,
                                         variantRelease: variant.release_year,
-                                        variantPackaging: variant.packaging,
+                                        variantCaseType: variant.case_type,
                                         variantNotes: variant.notes || '',
                                         variantBarcode: variant.barcode || '',
                                         imageCover: coverImg ? { preview: coverImg.image_url, existing: true } : null,
@@ -2279,7 +2388,7 @@ export default function VHSCollectionTracker() {
                           </span>
                         </div>
                         <p className="text-gray-700 text-sm mb-3">
-                          {item.variant.release_year} • {item.variant.packaging}
+                          {item.variant.release_year} • {item.variant.case_type}
                         </p>
 
                         {/* Personal Collection Details */}
@@ -2547,8 +2656,8 @@ export default function VHSCollectionTracker() {
                               <p className="text-gray-600">{submission.release_year}</p>
                             </div>
                             <div>
-                              <p className="text-sm font-semibold text-gray-700 mb-1">Packaging</p>
-                              <p className="text-gray-600">{submission.packaging}</p>
+                              <p className="text-sm font-semibold text-gray-700 mb-1">Case Type</p>
+                              <p className="text-gray-600">{submission.case_type}</p>
                             </div>
                             {submission.barcode && (
                               <div className="md:col-span-2">
@@ -2771,22 +2880,17 @@ export default function VHSCollectionTracker() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Packaging</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Case Type</label>
                         <select
-                          value={newSubmission.variantPackaging}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantPackaging: e.target.value})}
+                          value={newSubmission.variantCaseType}
+                          onChange={(e) => setNewSubmission({...newSubmission, variantCaseType: e.target.value})}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         >
-                          <option value="">Select Packaging</option>
+                          <option value="">Select Case Type</option>
+                          <option value="Slipcase">Slipcase</option>
                           <option value="Clamshell">Clamshell</option>
-                          <option value="Slipcover">Slipcover</option>
-                          <option value="Cardboard Sleeve">Cardboard Sleeve</option>
-                          <option value="Plastic Case">Plastic Case</option>
                           <option value="Big Box">Big Box</option>
-                          <option value="Standard Case">Standard Case</option>
-                          <option value="Rental Case">Rental Case</option>
-                          <option value="Screener">Screener</option>
-                          <option value="Promotional">Promotional</option>
+                          <option value="Other">Other</option>
                         </select>
                       </div>
                     </div>
@@ -2809,6 +2913,126 @@ export default function VHSCollectionTracker() {
                         rows="3"
                         placeholder="Release-specific notes (e.g., special edition features, rental version, etc.)"
                       />
+                    </div>
+
+                    {/* Advanced Fields Section */}
+                    <div className="border-t pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvancedFields(!showAdvancedFields)}
+                        className="flex items-center justify-between w-full text-left text-sm font-semibold text-gray-700 hover:text-purple-600 transition"
+                      >
+                        <span>Advanced Fields (Optional)</span>
+                        <ChevronRight className={`w-5 h-5 transition-transform ${showAdvancedFields ? 'rotate-90' : ''}`} />
+                      </button>
+
+                      {showAdvancedFields && (
+                        <div className="mt-4 space-y-4 pl-4 border-l-2 border-purple-200">
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Edition Type</label>
+                              <select
+                                value={newSubmission.editionType}
+                                onChange={(e) => setNewSubmission({...newSubmission, editionType: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Edition Type</option>
+                                <option value="Retail">Retail</option>
+                                <option value="Promotional">Promotional</option>
+                                <option value="Screener">Screener</option>
+                                <option value="Bootleg">Bootleg</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Audio Language</label>
+                              <select
+                                value={newSubmission.audioLanguage}
+                                onChange={(e) => setNewSubmission({...newSubmission, audioLanguage: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Language</option>
+                                <option value="English">English</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="French">French</option>
+                                <option value="Japanese">Japanese</option>
+                                <option value="Chinese">Chinese</option>
+                                <option value="German">German</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Subtitles</label>
+                              <select
+                                value={newSubmission.subtitles === null ? '' : newSubmission.subtitles.toString()}
+                                onChange={(e) => setNewSubmission({...newSubmission, subtitles: e.target.value === '' ? null : e.target.value === 'true'})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Unknown</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Original Rating</label>
+                              <select
+                                value={newSubmission.originalRating}
+                                onChange={(e) => setNewSubmission({...newSubmission, originalRating: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Rating</option>
+                                <option value="G">G</option>
+                                <option value="PG">PG</option>
+                                <option value="PG-13">PG-13</option>
+                                <option value="R">R</option>
+                                <option value="NC-17">NC-17</option>
+                                <option value="18+">18+</option>
+                                <option value="Not Rated">Not Rated</option>
+                                <option value="Unrated">Unrated</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Aspect Ratio</label>
+                              <select
+                                value={newSubmission.aspectRatio}
+                                onChange={(e) => setNewSubmission({...newSubmission, aspectRatio: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Aspect Ratio</option>
+                                <option value="4:3 (Fullscreen)">4:3 (Fullscreen)</option>
+                                <option value="1.85:1 (Widescreen)">1.85:1 (Widescreen)</option>
+                                <option value="2.35:1 (Widescreen)">2.35:1 (Widescreen)</option>
+                                <option value="Letterboxed">Letterboxed</option>
+                                <option value="Open Matte">Open Matte</option>
+                                <option value="Pan & Scan">Pan & Scan</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Shell Color</label>
+                              <select
+                                value={newSubmission.shellColor}
+                                onChange={(e) => setNewSubmission({...newSubmission, shellColor: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Shell Color</option>
+                                <option value="Black">Black</option>
+                                <option value="Clear">Clear</option>
+                                <option value="White">White</option>
+                                <option value="Gray">Gray</option>
+                                <option value="Blue">Blue</option>
+                                <option value="Red">Red</option>
+                                <option value="Green">Green</option>
+                                <option value="Yellow">Yellow</option>
+                                <option value="Orange">Orange</option>
+                                <option value="Purple">Purple</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -2904,7 +3128,7 @@ export default function VHSCollectionTracker() {
 
                         {/* Spine Image */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Spine</label>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Spine (Optional)</label>
                           {newSubmission.imageSpine ? (
                             <div className="relative group">
                               <img loading="lazy"
@@ -2947,7 +3171,7 @@ export default function VHSCollectionTracker() {
 
                         {/* Tape Label Image */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Tape Label</label>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Tape Label (Optional)</label>
                           {newSubmission.imageTapeLabel ? (
                             <div className="relative group">
                               <img loading="lazy"
