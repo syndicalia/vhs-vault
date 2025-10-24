@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, Loader } from 'lucide-react';
+import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, Loader, ChevronUp, ChevronDown } from 'lucide-react';
 
 const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -45,7 +45,10 @@ export default function VHSCollectionTracker() {
   const [tmdbSearching, setTmdbSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
-  const [sortVariantsBy, setSortVariantsBy] = useState('date'); // 'date', 'region', 'format'
+  const [sortVariantsBy, setSortVariantsBy] = useState('date'); // 'date', 'region', 'title'
+  const [sortVariantsDirection, setSortVariantsDirection] = useState('asc'); // 'asc' or 'desc'
+  const [sortCollectionBy, setSortCollectionBy] = useState('date'); // 'date', 'region', 'title'
+  const [sortCollectionDirection, setSortCollectionDirection] = useState('asc'); // 'asc' or 'desc'
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -995,16 +998,53 @@ export default function VHSCollectionTracker() {
   const sortVariants = (variants) => {
     if (!variants) return [];
     const sorted = [...variants];
-    switch (sortVariantsBy) {
-      case 'date':
-        return sorted.sort((a, b) => parseInt(a.release_year) - parseInt(b.release_year));
-      case 'region':
-        return sorted.sort((a, b) => a.region.localeCompare(b.region));
-      case 'format':
-        return sorted.sort((a, b) => a.format.localeCompare(b.format));
-      default:
-        return sorted;
-    }
+    const direction = sortVariantsDirection === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortVariantsBy) {
+        case 'date':
+          comparison = (parseInt(a.release_year) || 0) - (parseInt(b.release_year) || 0);
+          // Subsort by title if dates are equal
+          if (comparison === 0) {
+            const masterA = masterReleases.find(m => m.variants?.some(v => v.id === a.id));
+            const masterB = masterReleases.find(m => m.variants?.some(v => v.id === b.id));
+            if (masterA && masterB) {
+              comparison = masterA.title.localeCompare(masterB.title);
+            }
+          }
+          break;
+        case 'region':
+          comparison = (a.region || '').localeCompare(b.region || '');
+          // Subsort by title if regions are equal
+          if (comparison === 0) {
+            const masterA = masterReleases.find(m => m.variants?.some(v => v.id === a.id));
+            const masterB = masterReleases.find(m => m.variants?.some(v => v.id === b.id));
+            if (masterA && masterB) {
+              comparison = masterA.title.localeCompare(masterB.title);
+            }
+          }
+          break;
+        case 'title':
+          const masterA = masterReleases.find(m => m.variants?.some(v => v.id === a.id));
+          const masterB = masterReleases.find(m => m.variants?.some(v => v.id === b.id));
+          if (masterA && masterB) {
+            comparison = masterA.title.localeCompare(masterB.title);
+            // Subsort by release year if titles are equal
+            if (comparison === 0) {
+              comparison = (parseInt(a.release_year) || 0) - (parseInt(b.release_year) || 0);
+            }
+          }
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return comparison * direction;
+    });
+
+    return sorted;
   };
 
   const getCollectionItems = () => {
@@ -1021,6 +1061,48 @@ export default function VHSCollectionTracker() {
       const variant = master?.variants?.find(v => v.id === item.variant_id);
       return { master, variant };
     }).filter(item => item.master && item.variant);
+  };
+
+  const sortCollectionItems = (items) => {
+    if (!items || items.length === 0) return [];
+    const sorted = [...items];
+    const direction = sortCollectionDirection === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortCollectionBy) {
+        case 'date':
+          comparison = (parseInt(a.variant?.release_year) || 0) - (parseInt(b.variant?.release_year) || 0);
+          // Subsort by title if dates are equal
+          if (comparison === 0 && a.master && b.master) {
+            comparison = a.master.title.localeCompare(b.master.title);
+          }
+          break;
+        case 'region':
+          comparison = (a.variant?.region || '').localeCompare(b.variant?.region || '');
+          // Subsort by title if regions are equal
+          if (comparison === 0 && a.master && b.master) {
+            comparison = a.master.title.localeCompare(b.master.title);
+          }
+          break;
+        case 'title':
+          if (a.master && b.master) {
+            comparison = a.master.title.localeCompare(b.master.title);
+            // Subsort by release year if titles are equal
+            if (comparison === 0) {
+              comparison = (parseInt(a.variant?.release_year) || 0) - (parseInt(b.variant?.release_year) || 0);
+            }
+          }
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return comparison * direction;
+    });
+
+    return sorted;
   };
 
   if (loading) {
@@ -1649,8 +1731,15 @@ export default function VHSCollectionTracker() {
                       >
                         <option value="date">Release Date</option>
                         <option value="region">Region</option>
-                        <option value="format">Format</option>
+                        <option value="title">Title</option>
                       </select>
+                      <button
+                        onClick={() => setSortVariantsDirection(sortVariantsDirection === 'asc' ? 'desc' : 'asc')}
+                        className="p-1 hover:bg-gray-100 rounded transition"
+                        title={sortVariantsDirection === 'asc' ? 'Ascending' : 'Descending'}
+                      >
+                        {sortVariantsDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
                   <button
@@ -2191,8 +2280,15 @@ export default function VHSCollectionTracker() {
                         >
                           <option value="date">Release Date</option>
                           <option value="region">Region</option>
-                          <option value="format">Format</option>
+                          <option value="title">Title</option>
                         </select>
+                        <button
+                          onClick={() => setSortVariantsDirection(sortVariantsDirection === 'asc' ? 'desc' : 'asc')}
+                          className="p-1 hover:bg-gray-100 rounded transition"
+                          title={sortVariantsDirection === 'asc' ? 'Ascending' : 'Descending'}
+                        >
+                          {sortVariantsDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
                       </div>
                     </div>
                     <button
@@ -2364,7 +2460,30 @@ export default function VHSCollectionTracker() {
 
         {view === 'collection' && (
           <>
-            <h2 className="text-4xl font-bold text-gray-900 mb-8">My Collection</h2>
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-4xl font-bold text-gray-900">My Collection</h2>
+              {collection.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Sort by:</span>
+                  <select
+                    value={sortCollectionBy}
+                    onChange={(e) => setSortCollectionBy(e.target.value)}
+                    className="text-sm border border-gray-300 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="date">Release Date</option>
+                    <option value="region">Region</option>
+                    <option value="title">Title</option>
+                  </select>
+                  <button
+                    onClick={() => setSortCollectionDirection(sortCollectionDirection === 'asc' ? 'desc' : 'asc')}
+                    className="p-1 hover:bg-gray-100 rounded transition"
+                    title={sortCollectionDirection === 'asc' ? 'Ascending' : 'Descending'}
+                  >
+                    {sortCollectionDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+              )}
+            </div>
             {collection.length === 0 ? (
               <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
                 <div className="relative inline-block mb-6">
@@ -2382,7 +2501,7 @@ export default function VHSCollectionTracker() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {getCollectionItems().map((item, idx) => (
+                {sortCollectionItems(getCollectionItems()).map((item, idx) => (
                   <div key={idx} className="bg-white rounded-lg shadow p-6">
                     <div className="flex gap-4 items-start">
                       {/* Variant Images - Left Side */}
