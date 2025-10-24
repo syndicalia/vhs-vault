@@ -197,7 +197,11 @@ export default function VHSCollectionTracker() {
   const loadUserCollection = async () => {
     const { data, error } = await supabase
       .from('user_collections')
-      .select('*')
+      .select(`
+        *,
+        master:master_releases(*),
+        variant:variants(*, variant_images(*))
+      `)
       .eq('user_id', user.id);
 
     if (!error) setCollection(data || []);
@@ -206,7 +210,11 @@ export default function VHSCollectionTracker() {
   const loadUserWishlist = async () => {
     const { data, error } = await supabase
       .from('user_wishlists')
-      .select('*')
+      .select(`
+        *,
+        master:master_releases(*),
+        variant:variants(*, variant_images(*))
+      `)
       .eq('user_id', user.id);
 
     if (!error) setWishlist(data || []);
@@ -1054,20 +1062,22 @@ export default function VHSCollectionTracker() {
   };
 
   const collectionItems = useMemo(() => {
-    return collection.map(item => {
-      const master = masterReleases.find(m => m.id === item.master_id);
-      const variant = master?.variants?.find(v => v.id === item.variant_id);
-      return { master, variant };
-    }).filter(item => item.master && item.variant);
-  }, [collection, masterReleases]);
+    return collection
+      .filter(item => item.master && item.variant)
+      .map(item => ({
+        master: item.master,
+        variant: item.variant
+      }));
+  }, [collection]);
 
   const wishlistItems = useMemo(() => {
-    return wishlist.map(item => {
-      const master = masterReleases.find(m => m.id === item.master_id);
-      const variant = master?.variants?.find(v => v.id === item.variant_id);
-      return { master, variant };
-    }).filter(item => item.master && item.variant);
-  }, [wishlist, masterReleases]);
+    return wishlist
+      .filter(item => item.master && item.variant)
+      .map(item => ({
+        master: item.master,
+        variant: item.variant
+      }));
+  }, [wishlist]);
 
   const sortCollectionItems = (items) => {
     if (!items || items.length === 0) return [];
