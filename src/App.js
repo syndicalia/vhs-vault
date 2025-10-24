@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, Loader } from 'lucide-react';
 
 const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -14,7 +14,6 @@ export default function VHSCollectionTracker() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [masterReleases, setMasterReleases] = useState([]);
-  const [topReleases, setTopReleases] = useState([]);
   const [collection, setCollection] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [ratings, setRatings] = useState([]);
@@ -35,6 +34,18 @@ export default function VHSCollectionTracker() {
   const [tmdbSearchResults, setTmdbSearchResults] = useState([]);
   const [showTmdbDropdown, setShowTmdbDropdown] = useState(false);
   const [tmdbSearchTimeout, setTmdbSearchTimeout] = useState(null);
+  const [tmdbSearchTerm, setTmdbSearchTerm] = useState('');
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [collectionToAdd, setCollectionToAdd] = useState({ masterId: null, variantId: null });
+  const [collectionDetails, setCollectionDetails] = useState({ condition: '', notes: '' });
+
+  // Toast and loading states
+  const [toast, setToast] = useState(null);
+  const [loadingVariants, setLoadingVariants] = useState(false);
+  const [tmdbSearching, setTmdbSearching] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [sortVariantsBy, setSortVariantsBy] = useState('date'); // 'date', 'region', 'format'
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -45,9 +56,16 @@ export default function VHSCollectionTracker() {
     variantFormat: 'VHS',
     variantRegion: '',
     variantRelease: '',
-    variantPackaging: '',
+    variantCaseType: '',
     variantNotes: '',
     variantBarcode: '',
+    // Advanced fields
+    editionType: '',
+    audioLanguage: '',
+    subtitles: null,
+    originalRating: '',
+    aspectRatio: '',
+    shellColor: '',
     imageCover: null,
     imageBack: null,
     imageSpine: null,
@@ -85,6 +103,18 @@ export default function VHSCollectionTracker() {
   }, [isAdmin]);
 
   useEffect(() => {
+    // Auto-dismiss toast after 3 seconds
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
     // Close TMDB dropdown when clicking outside
     const handleClickOutside = (event) => {
       if (showTmdbDropdown && !event.target.closest('.tmdb-search-container')) {
@@ -107,7 +137,6 @@ export default function VHSCollectionTracker() {
   const loadAllData = async () => {
     await Promise.all([
       loadMasterReleases(),
-      loadTopReleases(),
       loadUserCollection(),
       loadUserWishlist(),
       loadUserRatings(),
@@ -117,56 +146,49 @@ export default function VHSCollectionTracker() {
   };
 
   const loadMasterReleases = async () => {
+    // Only load master data with variant count - full variants load on demand
     const { data, error } = await supabase
       .from('master_releases')
-      .select('*, variants(*, variant_images(*))');
+      .select(`
+        id,
+        title,
+        director,
+        year,
+        genre,
+        studio,
+        poster_url,
+        avg_rating,
+        total_ratings,
+        variants(count)
+      `);
 
     if (!error && data) {
-      setMasterReleases(data);
+      // Transform count result to simple variant_count property
+      const mastersWithCount = data.map(master => ({
+        ...master,
+        variant_count: master.variants?.[0]?.count || 0,
+        variants: [] // Empty array for compatibility
+      }));
+      setMasterReleases(mastersWithCount);
     }
   };
 
-  const loadTopReleases = async () => {
-    // Get collection counts by master_id
-    const { data: collectionCounts, error: countError } = await supabase
-      .from('user_collections')
-      .select('master_id');
+  const loadVariantsForMaster = async (masterId) => {
+    setLoadingVariants(true);
+    const { data, error } = await supabase
+      .from('variants')
+      .select('*, variant_images(*)')
+      .eq('master_id', masterId)
+      .eq('approved', true)
+      .order('release_year', { ascending: false });
 
-    if (countError || !collectionCounts) {
-      setTopReleases([]);
-      return;
+    setLoadingVariants(false);
+    if (error) {
+      console.error('Error loading variants:', error);
+      showToast('Error loading variants', 'error');
+      return [];
     }
-
-    // Count occurrences of each master_id
-    const counts = {};
-    collectionCounts.forEach(item => {
-      counts[item.master_id] = (counts[item.master_id] || 0) + 1;
-    });
-
-    // Sort by count and get top 5 master_ids
-    const topMasterIds = Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([masterId]) => parseInt(masterId));
-
-    if (topMasterIds.length === 0) {
-      setTopReleases([]);
-      return;
-    }
-
-    // Fetch the actual master releases with their variants
-    const { data: releases, error: releasesError } = await supabase
-      .from('master_releases')
-      .select('*, variants(*, variant_images(*))')
-      .in('id', topMasterIds);
-
-    if (!releasesError && releases) {
-      // Sort releases by the counts we calculated
-      const sortedReleases = releases.sort((a, b) => {
-        return (counts[b.id] || 0) - (counts[a.id] || 0);
-      });
-      setTopReleases(sortedReleases);
-    }
+    return data || [];
   };
 
   const loadUserCollection = async () => {
@@ -258,6 +280,7 @@ export default function VHSCollectionTracker() {
     if (!searchQuery || searchQuery.length < 2) {
       setTmdbSearchResults([]);
       setShowTmdbDropdown(false);
+      setTmdbSearching(false);
       return;
     }
 
@@ -265,6 +288,8 @@ export default function VHSCollectionTracker() {
     if (tmdbSearchTimeout) {
       clearTimeout(tmdbSearchTimeout);
     }
+
+    setTmdbSearching(true);
 
     // Set new timeout for debouncing
     const timeout = setTimeout(async () => {
@@ -278,8 +303,11 @@ export default function VHSCollectionTracker() {
           setTmdbSearchResults(data.results.slice(0, 10)); // Limit to 10 results
           setShowTmdbDropdown(true);
         }
+        setTmdbSearching(false);
       } catch (error) {
         console.error('TMDB search error:', error);
+        setTmdbSearching(false);
+        showToast('Error searching TMDB', 'error');
       }
     }, 300); // 300ms debounce
 
@@ -342,11 +370,11 @@ export default function VHSCollectionTracker() {
 
     if (isSignUp) {
       const { error } = await supabase.auth.signUp({ email, password });
-      if (error) alert(error.message);
-      else alert('Check your email for confirmation link!');
+      if (error) showToast(error.message, 'error');
+      else showToast('Check your email for confirmation link!');
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message);
+      if (error) showToast(error.message, 'error');
     }
     setLoading(false);
   };
@@ -355,12 +383,37 @@ export default function VHSCollectionTracker() {
     await supabase.auth.signOut();
   };
 
-  const addToCollection = async (masterId, variantId) => {
+  const showAddToCollectionModal = (masterId, variantId) => {
+    setCollectionToAdd({ masterId, variantId });
+    setCollectionDetails({ condition: '', notes: '' });
+    setShowCollectionModal(true);
+  };
+
+  const addToCollection = async (masterId, variantId, condition = null, notes = null) => {
     const { error } = await supabase
       .from('user_collections')
-      .insert([{ user_id: user.id, master_id: masterId, variant_id: variantId }]);
+      .insert([{
+        user_id: user.id,
+        master_id: masterId,
+        variant_id: variantId,
+        condition: condition,
+        notes: notes
+      }]);
 
-    if (!error) loadUserCollection();
+    if (!error) {
+      loadUserCollection();
+      setShowCollectionModal(false);
+      setCollectionDetails({ condition: '', notes: '' });
+    }
+  };
+
+  const handleAddToCollection = () => {
+    addToCollection(
+      collectionToAdd.masterId,
+      collectionToAdd.variantId,
+      collectionDetails.condition || null,
+      collectionDetails.notes || null
+    );
   };
 
   const removeFromCollection = async (variantId) => {
@@ -483,7 +536,7 @@ export default function VHSCollectionTracker() {
       await loadPendingSubmissions();
     } catch (error) {
       console.error('Vote error:', error);
-      alert('Error voting: ' + error.message);
+      showToast('Error voting: ' + error.message, 'error');
     }
   };
 
@@ -532,13 +585,13 @@ export default function VHSCollectionTracker() {
       }
 
       console.log('Approval successful:', data);
-      alert('Submission approved!');
+      showToast('Submission approved!');
 
       // Reload all data to ensure consistency
       await loadAllData();
     } catch (error) {
       console.error('Error in approveSubmission:', error);
-      alert('Error approving submission: ' + error.message);
+      showToast('Error approving submission: ' + error.message, 'error');
     }
   };
 
@@ -569,10 +622,10 @@ export default function VHSCollectionTracker() {
 
       if (error) throw error;
 
-      alert('Submission rejected and deleted.');
+      showToast('Submission rejected and deleted');
       await loadPendingSubmissions();
     } catch (error) {
-      alert('Error rejecting submission: ' + error.message);
+      showToast('Error rejecting submission: ' + error.message, 'error');
     }
   };
 
@@ -605,10 +658,10 @@ export default function VHSCollectionTracker() {
 
       if (error) throw error;
 
-      alert('Variant deleted successfully.');
+      showToast('Variant deleted successfully');
       await loadAllData();
     } catch (error) {
-      alert('Error deleting variant: ' + error.message);
+      showToast('Error deleting variant: ' + error.message, 'error');
     }
   };
 
@@ -651,11 +704,11 @@ export default function VHSCollectionTracker() {
 
       if (error) throw error;
 
-      alert('Master release and all variants deleted successfully.');
+      showToast('Master release and all variants deleted successfully');
       setSelectedMaster(null);
       await loadAllData();
     } catch (error) {
-      alert('Error deleting master release: ' + error.message);
+      showToast('Error deleting master release: ' + error.message, 'error');
     }
   };
 
@@ -762,11 +815,11 @@ export default function VHSCollectionTracker() {
       // Validate required fields for variants
       if (!editingMaster) {
         if (!newSubmission.variantRegion) {
-          alert('Region is required! Please select a region before submitting.');
+          showToast('Region is required! Please select a region before submitting.', 'error');
           return;
         }
-        if (!newSubmission.variantPackaging) {
-          alert('Packaging is required! Please select a packaging type before submitting.');
+        if (!newSubmission.variantCaseType) {
+          showToast('Case Type is required! Please select a case type before submitting.', 'error');
           return;
         }
       }
@@ -774,21 +827,14 @@ export default function VHSCollectionTracker() {
       // Validate required images for new submissions (not edits)
       if (!editingMaster && !editingVariant) {
         if (!newSubmission.imageCover) {
-          alert('Cover image is required! Please upload a cover image.');
+          showToast('Cover image is required! Please upload a cover image.', 'error');
           return;
         }
         if (!newSubmission.imageBack) {
-          alert('Back image is required! Please upload a back image.');
+          showToast('Back image is required! Please upload a back image.', 'error');
           return;
         }
-        if (!newSubmission.imageSpine) {
-          alert('Spine image is required! Please upload a spine image.');
-          return;
-        }
-        if (!newSubmission.imageTapeLabel) {
-          alert('Tape Label image is required! Please upload a tape label image.');
-          return;
-        }
+        // Spine and Tape Label are optional
       }
 
       if (submitType === 'master') {
@@ -810,7 +856,7 @@ export default function VHSCollectionTracker() {
 
           if (masterError) throw masterError;
 
-          alert('Master release updated successfully!');
+          showToast('Master release updated successfully!');
           setEditingMaster(null);
         } else {
           // Create new master
@@ -844,9 +890,15 @@ export default function VHSCollectionTracker() {
               format: newSubmission.variantFormat,
               region: newSubmission.variantRegion,
               release_year: newSubmission.variantRelease,
-              packaging: newSubmission.variantPackaging,
+              case_type: newSubmission.variantCaseType,
               notes: newSubmission.variantNotes,
               barcode: newSubmission.variantBarcode,
+              edition_type: newSubmission.editionType || null,
+              audio_language: newSubmission.audioLanguage || null,
+              subtitles: newSubmission.subtitles,
+              original_rating: newSubmission.originalRating || null,
+              aspect_ratio: newSubmission.aspectRatio || null,
+              shell_color: newSubmission.shellColor || null,
               submitted_by: user.id,
               approved: false
             }])
@@ -856,7 +908,7 @@ export default function VHSCollectionTracker() {
           if (variantError) throw variantError;
 
           await uploadImages(variant.id);
-          alert('Submission sent for review!');
+          showToast('Submission sent for review!');
         }
       } else {
         // Variant only
@@ -868,9 +920,15 @@ export default function VHSCollectionTracker() {
               format: newSubmission.variantFormat,
               region: newSubmission.variantRegion,
               release_year: newSubmission.variantRelease,
-              packaging: newSubmission.variantPackaging,
+              case_type: newSubmission.variantCaseType,
               notes: newSubmission.variantNotes,
-              barcode: newSubmission.variantBarcode
+              barcode: newSubmission.variantBarcode,
+              edition_type: newSubmission.editionType || null,
+              audio_language: newSubmission.audioLanguage || null,
+              subtitles: newSubmission.subtitles,
+              original_rating: newSubmission.originalRating || null,
+              aspect_ratio: newSubmission.aspectRatio || null,
+              shell_color: newSubmission.shellColor || null
             })
             .eq('id', editingVariant.id);
 
@@ -883,10 +941,15 @@ export default function VHSCollectionTracker() {
             await uploadImages(editingVariant.id);
           }
 
-          alert('Variant updated successfully!');
+          showToast('Variant updated successfully!');
           setEditingVariant(null);
         } else {
           // Create new variant
+          if (!selectedMaster) {
+            showToast('Error: No master release selected. Please select a title first.', 'error');
+            return;
+          }
+
           const { data: variant, error } = await supabase
             .from('variants')
             .insert([{
@@ -894,7 +957,7 @@ export default function VHSCollectionTracker() {
               format: newSubmission.variantFormat,
               region: newSubmission.variantRegion,
               release_year: newSubmission.variantRelease,
-              packaging: newSubmission.variantPackaging,
+              case_type: newSubmission.variantCaseType,
               notes: newSubmission.variantNotes,
               barcode: newSubmission.variantBarcode,
               submitted_by: user.id,
@@ -906,7 +969,7 @@ export default function VHSCollectionTracker() {
           if (error) throw error;
 
           await uploadImages(variant.id);
-          alert('Submission sent for review!');
+          showToast('Submission sent for review!');
         }
       }
 
@@ -914,13 +977,13 @@ export default function VHSCollectionTracker() {
       setNewSubmission({
         masterTitle: '', year: '', director: '', studio: '', genre: '',
         variantFormat: 'VHS', variantRegion: '', variantRelease: '',
-        variantPackaging: '', variantNotes: '', variantBarcode: '',
+        variantCaseType: '', variantNotes: '', variantBarcode: '',
         imageCover: null, imageBack: null, imageSpine: null, imageTapeLabel: null
       });
 
       loadAllData();
     } catch (error) {
-      alert('Error: ' + error.message);
+      showToast('Error: ' + error.message, 'error');
     }
   };
 
@@ -928,6 +991,21 @@ export default function VHSCollectionTracker() {
     master.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     master.director.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const sortVariants = (variants) => {
+    if (!variants) return [];
+    const sorted = [...variants];
+    switch (sortVariantsBy) {
+      case 'date':
+        return sorted.sort((a, b) => parseInt(a.release_year) - parseInt(b.release_year));
+      case 'region':
+        return sorted.sort((a, b) => a.region.localeCompare(b.region));
+      case 'format':
+        return sorted.sort((a, b) => a.format.localeCompare(b.format));
+      default:
+        return sorted;
+    }
+  };
 
   const getCollectionItems = () => {
     return collection.map(item => {
@@ -956,12 +1034,18 @@ export default function VHSCollectionTracker() {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full">
-          <div className="flex items-center justify-center mb-6">
-            <Film className="w-12 h-12 text-purple-600 mr-3" />
-            <h1 className="text-3xl font-bold text-gray-800">VHS Vault</h1>
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-orange-500">
+          <div className="flex flex-col items-center justify-center mb-8">
+            <div className="relative mb-4">
+              <Film className="w-16 h-16 text-orange-400 drop-shadow-2xl" />
+              <div className="absolute -inset-2 bg-orange-400 rounded-full opacity-20 blur-lg"></div>
+            </div>
+            <h1 className="text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-500 via-yellow-400 to-orange-500 mb-2">
+              VHS VAULT
+            </h1>
+            <p className="text-sm text-gray-600 font-mono tracking-wider">REWIND • PLAY • COLLECT</p>
           </div>
-          <p className="text-gray-600 text-center mb-6">
+          <p className="text-gray-700 text-center mb-6 font-semibold">
             {isSignUp ? 'Create your account' : 'Sign in to your account'}
           </p>
           <div>
@@ -1000,27 +1084,49 @@ export default function VHSCollectionTracker() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-purple-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-24 right-6 z-50 px-6 py-4 rounded-lg shadow-2xl transform transition-all duration-300 animate-bounce-in flex items-center space-x-3 ${
+          toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'
+        } text-white font-semibold`}>
+          {toast.type === 'error' ? (
+            <AlertCircle className="w-5 h-5" />
+          ) : (
+            <Check className="w-5 h-5" />
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
+
+      <div className="sticky top-0 z-40 bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-600 text-white shadow-2xl border-b-4 border-orange-500">
+        <div className="max-w-7xl mx-auto px-6 py-5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Film className="w-8 h-8" />
-              <h1 className="text-2xl font-bold">VHS Vault</h1>
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <Film className="w-10 h-10 text-orange-400 drop-shadow-lg" />
+                <div className="absolute -inset-1 bg-orange-400 rounded-full opacity-20 blur"></div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-300 via-yellow-200 to-orange-300">
+                  VHS VAULT
+                </h1>
+                <p className="text-xs text-purple-200 font-mono tracking-wider">REWIND • PLAY • COLLECT</p>
+              </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="hidden md:flex items-center space-x-2 bg-purple-700 px-4 py-2 rounded-lg">
-                <User className="w-5 h-5" />
-                <span className="text-sm">{user.email}</span>
+              <div className="hidden md:flex items-center space-x-2 bg-purple-800/50 backdrop-blur-sm px-5 py-2.5 rounded-lg border border-purple-500/30">
+                <User className="w-5 h-5 text-orange-300" />
+                <span className="text-sm font-medium">{user.email}</span>
                 {isAdmin && (
-                  <span className="ml-2 bg-yellow-400 text-purple-900 px-2 py-0.5 rounded text-xs font-bold">
+                  <span className="ml-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-purple-900 px-3 py-1 rounded-full text-xs font-black shadow-lg">
                     ADMIN
                   </span>
                 )}
               </div>
               <button
                 onClick={handleLogout}
-                className="bg-purple-700 hover:bg-purple-800 px-4 py-2 rounded-lg transition flex items-center space-x-2"
+                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 px-5 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2 font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5"
               >
                 <LogOut className="w-5 h-5" />
                 <span>Logout</span>
@@ -1030,8 +1136,8 @@ export default function VHSCollectionTracker() {
         </div>
       </div>
 
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4">
+      <div className="sticky top-[89px] z-30 bg-white shadow-lg border-b-2 border-gray-200">
+        <div className="max-w-7xl mx-auto px-6">
           <div className="flex space-x-2 md:space-x-8 overflow-x-auto">
             {(isAdmin
               ? ['search', 'browse', 'collection', 'wishlist', 'marketplace', 'pending']
@@ -1044,8 +1150,10 @@ export default function VHSCollectionTracker() {
                   setSelectedMaster(null);
                   setSelectedVariant(null);
                 }}
-                className={`py-4 px-2 border-b-2 font-medium transition whitespace-nowrap capitalize ${
-                  view === tab ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                className={`py-5 px-4 border-b-4 font-bold transition-all duration-300 whitespace-nowrap capitalize text-sm tracking-wide ${
+                  view === tab
+                    ? 'border-orange-500 text-purple-700 bg-purple-50'
+                    : 'border-transparent text-gray-500 hover:text-purple-600 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 {tab} {tab === 'collection' && `(${collection.length})`}
@@ -1057,127 +1165,142 @@ export default function VHSCollectionTracker() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-12">
         {view === 'search' && (
           <>
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSearchTerm(value);
-                    handleTitleSearch(value);
-                  }}
-                  onFocus={() => {
-                    if (tmdbSearchResults.length > 0) {
-                      setShowTmdbDropdown(true);
-                    }
-                  }}
-                  placeholder="Search for movies on TMDB..."
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  autoComplete="off"
-                />
-                {showTmdbDropdown && tmdbSearchResults.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-96 overflow-y-auto">
-                    {tmdbSearchResults.map((movie) => (
-                      <div
-                        key={movie.id}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          console.log('Movie clicked:', movie.title);
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              {/* Local Database Search */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Search Your Collection
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search titles or directors..."
+                    className="w-full pl-10 pr-4 py-3 border-2 border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Search existing titles in the database</p>
+              </div>
 
-                          // Fetch full movie details from TMDB
-                          try {
-                            const response = await fetch(
-                              `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
-                            );
-                            const details = await response.json();
+              {/* TMDB Search */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Find New Titles (TMDB)
+                </label>
+                <div className="relative tmdb-search-container">
+                  <Search className="absolute left-3 top-3 w-5 h-5 text-orange-400" />
+                  <input
+                    type="text"
+                    value={tmdbSearchTerm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setTmdbSearchTerm(value);
+                      handleTitleSearch(value);
+                    }}
+                    onFocus={() => {
+                      if (tmdbSearchResults.length > 0) {
+                        setShowTmdbDropdown(true);
+                      }
+                    }}
+                    placeholder="Search TMDB to add new titles..."
+                    className="w-full pl-10 pr-4 py-3 border-2 border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    autoComplete="off"
+                  />
+                  {tmdbSearching && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-lg p-4 text-center">
+                      <Loader className="w-6 h-6 animate-spin text-orange-500 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600">Searching TMDB...</p>
+                    </div>
+                  )}
+                  {showTmdbDropdown && tmdbSearchResults.length > 0 && !tmdbSearching && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-2xl max-h-96 overflow-y-auto">
+                      {tmdbSearchResults.map((movie) => (
+                        <div
+                          key={movie.id}
+                          onClick={async (e) => {
+                            e.stopPropagation();
 
-                            // Extract director
-                            let director = '';
-                            if (details.credits && details.credits.crew) {
-                              const directorObj = details.credits.crew.find(person => person.job === 'Director');
-                              director = directorObj ? directorObj.name : '';
+                            try {
+                              const response = await fetch(
+                                `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+                              );
+                              const details = await response.json();
+
+                              let director = '';
+                              if (details.credits && details.credits.crew) {
+                                const directorObj = details.credits.crew.find(person => person.job === 'Director');
+                                director = directorObj ? directorObj.name : '';
+                              }
+
+                              let studio = '';
+                              if (details.production_companies && details.production_companies.length > 0) {
+                                studio = details.production_companies[0].name;
+                              }
+
+                              let genres = '';
+                              if (details.genres && details.genres.length > 0) {
+                                genres = details.genres.map(g => g.name).join(', ');
+                              }
+
+                              setNewSubmission({
+                                masterTitle: movie.title,
+                                year: movie.release_date ? movie.release_date.substring(0, 4) : '',
+                                director: director,
+                                studio: studio,
+                                genre: genres,
+                                variantFormat: 'VHS',
+                                variantRegion: '',
+                                variantRelease: '',
+                                variantCaseType: '',
+                                variantNotes: '',
+                                variantBarcode: '',
+                                imageCover: null,
+                                imageBack: null,
+                                imageSpine: null,
+                                imageTapeLabel: null
+                              });
+
+                              setShowTmdbDropdown(false);
+                              setTmdbSearchResults([]);
+                              setTmdbSearchTerm('');
+                              setSubmitType('master');
+                              setShowSubmitModal(true);
+                            } catch (error) {
+                              console.error('Error fetching TMDB details:', error);
+                              showToast('Error loading movie details. Please try again.', 'error');
                             }
-
-                            // Extract studio
-                            let studio = '';
-                            if (details.production_companies && details.production_companies.length > 0) {
-                              studio = details.production_companies[0].name;
-                            }
-
-                            // Extract genres
-                            let genres = '';
-                            if (details.genres && details.genres.length > 0) {
-                              genres = details.genres.map(g => g.name).join(', ');
-                            }
-
-                            // Update form with TMDB data
-                            setNewSubmission({
-                              masterTitle: movie.title,
-                              year: movie.release_date ? movie.release_date.substring(0, 4) : '',
-                              director: director,
-                              studio: studio,
-                              genre: genres,
-                              variantFormat: 'VHS',
-                              variantRegion: '',
-                              variantRelease: '',
-                              variantPackaging: '',
-                              variantNotes: '',
-                              variantBarcode: '',
-                              imageCover: null,
-                              imageBack: null,
-                              imageSpine: null,
-                              imageTapeLabel: null
-                            });
-
-                            // Close dropdown and open modal
-                            setShowTmdbDropdown(false);
-                            setTmdbSearchResults([]);
-                            setSearchTerm('');
-                            setSubmitType('master');
-                            setShowSubmitModal(true);
-
-                            console.log('Modal should be open now');
-                          } catch (error) {
-                            console.error('Error fetching TMDB details:', error);
-                            alert('Error loading movie details. Please try again.');
-                          }
-                        }}
-                        className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                      >
-                        {movie.poster_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
-                            alt={movie.title}
-                            className="w-12 h-18 object-cover rounded mr-3 flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-12 h-18 bg-gray-200 rounded mr-3 flex-shrink-0 flex items-center justify-center">
-                            <Film className="w-6 h-6 text-gray-400" />
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-medium text-gray-800">{movie.title}</div>
-                          <div className="text-sm text-gray-500">
-                            {movie.release_date ? movie.release_date.substring(0, 4) : 'Unknown'}
+                          }}
+                          className="flex items-center p-3 hover:bg-orange-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition"
+                        >
+                          {movie.poster_path ? (
+                            <img loading="lazy"
+                              src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
+                              alt={movie.title}
+                              className="w-12 h-18 object-cover rounded mr-3 flex-shrink-0 shadow"
+                            />
+                          ) : (
+                            <div className="w-12 h-18 bg-gray-200 rounded mr-3 flex-shrink-0 flex items-center justify-center">
+                              <Film className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-semibold text-gray-900">{movie.title}</div>
+                            <div className="text-sm text-gray-600">
+                              {movie.release_date ? movie.release_date.substring(0, 4) : 'Unknown'}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Search online movie database to add new titles</p>
               </div>
-              <button
-                onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
-                className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add New Title</span>
-              </button>
             </div>
 
             {selectedVariant ? (
@@ -1192,21 +1315,21 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 {/* Variant Detail Card */}
-                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <div className="bg-white rounded-xl shadow-2xl p-8 mb-8 border border-gray-100">
                   <div className="flex gap-6">
                     {/* Variant Images Gallery */}
                     {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
                       <div className="flex-shrink-0">
-                        <img
+                        <img loading="lazy"
                           src={selectedVariant.variant_images[0].image_url}
                           alt="Variant cover"
-                          className="w-48 h-72 object-cover rounded shadow-lg cursor-pointer hover:shadow-xl transition"
+                          className="w-48 h-72 object-cover rounded-lg shadow-xl cursor-pointer hover:shadow-2xl hover:-translate-y-2 hover:rotate-2 transition-all duration-300 border-4 border-gray-800"
                           onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), 0)}
                         />
                         {selectedVariant.variant_images.length > 1 && (
                           <div className="grid grid-cols-3 gap-2 mt-3">
                             {selectedVariant.variant_images.slice(1, 4).map((img, idx) => (
-                              <img
+                              <img loading="lazy"
                                 key={idx}
                                 src={img.image_url}
                                 alt={`Image ${idx + 2}`}
@@ -1248,8 +1371,8 @@ export default function VHSCollectionTracker() {
                             <p className="text-gray-600">{selectedVariant.release_year}</p>
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-gray-700">Packaging</p>
-                            <p className="text-gray-600">{selectedVariant.packaging}</p>
+                            <p className="text-sm font-semibold text-gray-700">Case Type</p>
+                            <p className="text-gray-600">{selectedVariant.case_type}</p>
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-gray-700">Barcode</p>
@@ -1264,11 +1387,56 @@ export default function VHSCollectionTracker() {
                           </div>
                           {selectedVariant.notes && (
                             <div className="md:col-span-2">
-                              <p className="text-sm font-semibold text-gray-700">Notes</p>
+                              <p className="text-sm font-semibold text-gray-700">Variant Notes</p>
                               <p className="text-gray-600 italic">{selectedVariant.notes}</p>
                             </div>
                           )}
                         </div>
+
+                        {/* Advanced Fields - Only shown if filled out */}
+                        {(selectedVariant.edition_type || selectedVariant.audio_language || selectedVariant.subtitles !== null || selectedVariant.original_rating || selectedVariant.aspect_ratio || selectedVariant.shell_color) && (
+                          <div className="mt-4 pt-4 border-t">
+                            <h4 className="text-md font-bold text-gray-700 mb-3">Advanced Attributes</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {selectedVariant.edition_type && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Edition Type</p>
+                                  <p className="text-gray-600">{selectedVariant.edition_type}</p>
+                                </div>
+                              )}
+                              {selectedVariant.audio_language && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Audio Language</p>
+                                  <p className="text-gray-600">{selectedVariant.audio_language}</p>
+                                </div>
+                              )}
+                              {selectedVariant.subtitles !== null && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Subtitles</p>
+                                  <p className="text-gray-600">{selectedVariant.subtitles ? 'Yes' : 'No'}</p>
+                                </div>
+                              )}
+                              {selectedVariant.original_rating && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Original Rating</p>
+                                  <p className="text-gray-600">{selectedVariant.original_rating}</p>
+                                </div>
+                              )}
+                              {selectedVariant.aspect_ratio && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Aspect Ratio</p>
+                                  <p className="text-gray-600">{selectedVariant.aspect_ratio}</p>
+                                </div>
+                              )}
+                              {selectedVariant.shell_color && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Shell Color</p>
+                                  <p className="text-gray-600">{selectedVariant.shell_color}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Buttons */}
@@ -1278,7 +1446,7 @@ export default function VHSCollectionTracker() {
                             if (isInCollection(selectedVariant.id)) {
                               removeFromCollection(selectedVariant.id);
                             } else {
-                              addToCollection(selectedMaster?.id, selectedVariant.id);
+                              showAddToCollectionModal(selectedMaster?.id, selectedVariant.id);
                             }
                           }}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
@@ -1311,56 +1479,70 @@ export default function VHSCollectionTracker() {
               </div>
             ) : !selectedMaster ? (
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                  {searchTerm ? 'Search Results' : 'Top Variants in Collections'}
-                </h2>
-                <div className="grid gap-4">
-                  {(searchTerm ? filteredMasters : topReleases).map(master => (
-                  <div
-                    key={master.id}
-                    className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer"
-                    onClick={() => setSelectedMaster(master)}
-                  >
-                    <div className="flex gap-4 items-start">
-                      {master.poster_url ? (
-                        <img
-                          src={master.poster_url}
-                          alt={`${master.title} poster`}
-                          className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="w-24 h-36 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
-                          <Film className="w-12 h-12 text-purple-400" />
+                {searchTerm && (
+                  <>
+                    <h2 className="text-4xl font-bold text-gray-900 mb-8">Search Results</h2>
+                    <div className="grid gap-6">
+                      {filteredMasters.map(master => (
+                        <div
+                          key={master.id}
+                          className="bg-white rounded-lg shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 cursor-pointer border border-gray-100"
+                          onClick={async () => {
+                            const variants = await loadVariantsForMaster(master.id);
+                            setSelectedMaster({ ...master, variants });
+                          }}
+                        >
+                          <div className="flex gap-4 items-start">
+                            {master.poster_url ? (
+                              <img loading="lazy"
+                                src={master.poster_url}
+                                alt={`${master.title} poster`}
+                                className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-24 h-36 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                                <Film className="w-12 h-12 text-purple-400" />
+                              </div>
+                            )}
+                            <div className="flex-1">
+                              <h2 className="text-xl font-bold text-gray-800 mb-1">{master.title}</h2>
+                              <p className="text-gray-600">{master.director} • {master.year} • {master.genre}</p>
+                              <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
+                              <div className="flex items-center space-x-4 mt-3">
+                                <div className="flex items-center space-x-1">
+                                  <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                                  <span className="font-medium">{master.avg_rating || 0}</span>
+                                  <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
+                                </div>
+                                <p className="text-sm text-purple-600">{master.variant_count || 0} variant(s)</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {filteredMasters.length === 0 && (
+                        <div className="bg-gradient-to-br from-gray-50 to-purple-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-gray-300">
+                          <div className="relative inline-block mb-6">
+                            <Film className="w-24 h-24 text-gray-400 mx-auto" />
+                            <div className="absolute inset-0 bg-gray-400 rounded-full opacity-20 blur-xl"></div>
+                          </div>
+                          <h3 className="text-3xl font-bold text-gray-800 mb-3">No Matches Found</h3>
+                          <p className="text-gray-600 text-lg mb-6">Try adjusting your search or use TMDB to add new titles</p>
                         </div>
                       )}
-                      <div className="flex-1">
-                        <h2 className="text-xl font-bold text-gray-800 mb-1">{master.title}</h2>
-                        <p className="text-gray-600">{master.director} • {master.year} • {master.genre}</p>
-                        <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
-                        <div className="flex items-center space-x-4 mt-3">
-                          <div className="flex items-center space-x-1">
-                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                            <span className="font-medium">{master.avg_rating || 0}</span>
-                            <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
-                          </div>
-                          <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
-                        </div>
-                      </div>
                     </div>
+                  </>
+                )}
+                {!searchTerm && (
+                  <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
+                    <div className="relative inline-block mb-6">
+                      <Search className="w-24 h-24 text-purple-400 mx-auto" />
+                      <div className="absolute inset-0 bg-purple-400 rounded-full opacity-20 blur-xl"></div>
+                    </div>
+                    <h3 className="text-3xl font-bold text-gray-800 mb-3">Start Your Search</h3>
+                    <p className="text-gray-600 text-lg">Use the search bars above to find existing titles or discover new ones on TMDB</p>
                   </div>
-                ))}
-                  {(searchTerm ? filteredMasters : topReleases).length === 0 && (
-                    <div className="bg-white rounded-lg shadow p-12 text-center">
-                      <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg">
-                        {searchTerm ? 'No titles found' : 'No popular titles yet'}
-                      </p>
-                      <p className="text-gray-500 mt-2">
-                        {searchTerm ? 'Try a different search' : 'Be the first to add titles to your collection!'}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             ) : (
               <div>
@@ -1405,7 +1587,7 @@ export default function VHSCollectionTracker() {
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                   <div className="flex gap-6 mb-4">
                     {selectedMaster.poster_url ? (
-                      <img
+                      <img loading="lazy"
                         src={selectedMaster.poster_url}
                         alt={`${selectedMaster.title} poster`}
                         className="w-48 h-72 object-cover rounded shadow-lg flex-shrink-0 cursor-pointer hover:shadow-xl transition"
@@ -1456,7 +1638,21 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-gray-800">Variants ({selectedMaster.variants?.filter(v => v.approved).length || 0})</h3>
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-2xl font-bold text-gray-900">Variants ({selectedMaster.variants?.filter(v => v.approved).length || 0})</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">Sort by:</span>
+                      <select
+                        value={sortVariantsBy}
+                        onChange={(e) => setSortVariantsBy(e.target.value)}
+                        className="text-sm border border-gray-300 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="date">Release Date</option>
+                        <option value="region">Region</option>
+                        <option value="format">Format</option>
+                      </select>
+                    </div>
+                  </div>
                   <button
                     onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition flex items-center space-x-2"
@@ -1467,16 +1663,38 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 <div className="grid gap-4">
-                  {selectedMaster.variants?.filter(v => v.approved).map(variant => {
+                  {loadingVariants ? (
+                    // Loading skeleton
+                    <>
+                      {[1, 2, 3].map(i => (
+                        <div key={i} className="bg-white rounded-xl shadow-lg p-6 border border-gray-100 animate-pulse">
+                          <div className="flex gap-4 items-start">
+                            <div className="w-32 h-48 bg-gray-200 rounded flex-shrink-0"></div>
+                            <div className="flex-1 space-y-3">
+                              <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+                              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                              <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                            </div>
+                            <div className="flex flex-col space-y-2">
+                              <div className="w-24 h-10 bg-gray-200 rounded"></div>
+                              <div className="w-24 h-10 bg-gray-200 rounded"></div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    sortVariants(selectedMaster.variants?.filter(v => v.approved)).map(variant => {
                     const inColl = isInCollection(variant.id);
                     const inWish = isInWishlist(variant.id);
                     return (
-                      <div key={variant.id} className="bg-white rounded-lg shadow p-6">
+                      <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border border-gray-100">
                         <div className="flex gap-4 items-start">
                           {/* Variant Images - Left Side */}
                           {variant.variant_images && variant.variant_images.length > 0 ? (
                             <div className="flex-shrink-0">
-                              <img
+                              <img loading="lazy"
                                 src={variant.variant_images[0].image_url}
                                 alt="Variant cover"
                                 className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
@@ -1485,7 +1703,7 @@ export default function VHSCollectionTracker() {
                               {variant.variant_images.length > 1 && (
                                 <div className="flex mt-2 space-x-1">
                                   {variant.variant_images.slice(1, 4).map((img, idx) => (
-                                    <img
+                                    <img loading="lazy"
                                       key={idx}
                                       src={img.image_url}
                                       alt={`Variant ${idx + 2}`}
@@ -1528,13 +1746,15 @@ export default function VHSCollectionTracker() {
                               <span className="font-semibold">Release:</span> {variant.release_year}
                             </p>
                             <p className="text-gray-700 mb-1">
-                              <span className="font-semibold">Packaging:</span> {variant.packaging}
+                              <span className="font-semibold">Case Type:</span> {variant.case_type}
                             </p>
                             <p className="text-gray-700 mb-1">
                               <span className="font-semibold">Barcode:</span> {variant.barcode}
                             </p>
                             {variant.notes && (
-                              <p className="text-gray-600 text-sm mt-2 italic">{variant.notes}</p>
+                              <p className="text-gray-600 text-sm mt-2">
+                                <span className="font-semibold">Variant Notes:</span> <span className="italic">{variant.notes}</span>
+                              </p>
                             )}
                             <p className="text-xs text-gray-500 mt-2">
                               {variant.votes_up || 0} 👍 {variant.votes_down || 0} 👎
@@ -1548,7 +1768,7 @@ export default function VHSCollectionTracker() {
                                 if (inColl) {
                                   removeFromCollection(variant.id);
                                 } else {
-                                  addToCollection(selectedMaster.id, variant.id);
+                                  showAddToCollectionModal(selectedMaster.id, variant.id);
                                 }
                               }}
                               className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-2 ${
@@ -1587,9 +1807,15 @@ export default function VHSCollectionTracker() {
                                       variantFormat: variant.format,
                                       variantRegion: variant.region,
                                       variantRelease: variant.release_year,
-                                      variantPackaging: variant.packaging,
+                                      variantCaseType: variant.case_type,
                                       variantNotes: variant.notes || '',
                                       variantBarcode: variant.barcode || '',
+                                      editionType: variant.edition_type || '',
+                                      audioLanguage: variant.audio_language || '',
+                                      subtitles: variant.subtitles,
+                                      originalRating: variant.original_rating || '',
+                                      aspectRatio: variant.aspect_ratio || '',
+                                      shellColor: variant.shell_color || '',
                                       imageCover: coverImg ? { preview: coverImg.image_url, existing: true } : null,
                                       imageBack: backImg ? { preview: backImg.image_url, existing: true } : null,
                                       imageSpine: spineImg ? { preview: spineImg.image_url, existing: true } : null,
@@ -1616,7 +1842,8 @@ export default function VHSCollectionTracker() {
                         </div>
                       </div>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </div>
             )}
@@ -1657,21 +1884,21 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 {/* Variant Detail Card */}
-                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <div className="bg-white rounded-xl shadow-2xl p-8 mb-8 border border-gray-100">
                   <div className="flex gap-6">
                     {/* Variant Images Gallery */}
                     {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
                       <div className="flex-shrink-0">
-                        <img
+                        <img loading="lazy"
                           src={selectedVariant.variant_images[0].image_url}
                           alt="Variant cover"
-                          className="w-48 h-72 object-cover rounded shadow-lg cursor-pointer hover:shadow-xl transition"
+                          className="w-48 h-72 object-cover rounded-lg shadow-xl cursor-pointer hover:shadow-2xl hover:-translate-y-2 hover:rotate-2 transition-all duration-300 border-4 border-gray-800"
                           onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), 0)}
                         />
                         {selectedVariant.variant_images.length > 1 && (
                           <div className="grid grid-cols-3 gap-2 mt-3">
                             {selectedVariant.variant_images.slice(1, 4).map((img, idx) => (
-                              <img
+                              <img loading="lazy"
                                 key={idx}
                                 src={img.image_url}
                                 alt={`Image ${idx + 2}`}
@@ -1713,8 +1940,8 @@ export default function VHSCollectionTracker() {
                             <p className="text-gray-600">{selectedVariant.release_year}</p>
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-gray-700">Packaging</p>
-                            <p className="text-gray-600">{selectedVariant.packaging}</p>
+                            <p className="text-sm font-semibold text-gray-700">Case Type</p>
+                            <p className="text-gray-600">{selectedVariant.case_type}</p>
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-gray-700">Barcode</p>
@@ -1729,11 +1956,56 @@ export default function VHSCollectionTracker() {
                           </div>
                           {selectedVariant.notes && (
                             <div className="md:col-span-2">
-                              <p className="text-sm font-semibold text-gray-700">Notes</p>
+                              <p className="text-sm font-semibold text-gray-700">Variant Notes</p>
                               <p className="text-gray-600 italic">{selectedVariant.notes}</p>
                             </div>
                           )}
                         </div>
+
+                        {/* Advanced Fields - Only shown if filled out */}
+                        {(selectedVariant.edition_type || selectedVariant.audio_language || selectedVariant.subtitles !== null || selectedVariant.original_rating || selectedVariant.aspect_ratio || selectedVariant.shell_color) && (
+                          <div className="mt-4 pt-4 border-t">
+                            <h4 className="text-md font-bold text-gray-700 mb-3">Advanced Attributes</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {selectedVariant.edition_type && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Edition Type</p>
+                                  <p className="text-gray-600">{selectedVariant.edition_type}</p>
+                                </div>
+                              )}
+                              {selectedVariant.audio_language && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Audio Language</p>
+                                  <p className="text-gray-600">{selectedVariant.audio_language}</p>
+                                </div>
+                              )}
+                              {selectedVariant.subtitles !== null && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Subtitles</p>
+                                  <p className="text-gray-600">{selectedVariant.subtitles ? 'Yes' : 'No'}</p>
+                                </div>
+                              )}
+                              {selectedVariant.original_rating && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Original Rating</p>
+                                  <p className="text-gray-600">{selectedVariant.original_rating}</p>
+                                </div>
+                              )}
+                              {selectedVariant.aspect_ratio && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Aspect Ratio</p>
+                                  <p className="text-gray-600">{selectedVariant.aspect_ratio}</p>
+                                </div>
+                              )}
+                              {selectedVariant.shell_color && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Shell Color</p>
+                                  <p className="text-gray-600">{selectedVariant.shell_color}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Buttons */}
@@ -1743,7 +2015,7 @@ export default function VHSCollectionTracker() {
                             if (isInCollection(selectedVariant.id)) {
                               removeFromCollection(selectedVariant.id);
                             } else {
-                              addToCollection(selectedMaster?.id, selectedVariant.id);
+                              showAddToCollectionModal(selectedMaster?.id, selectedVariant.id);
                             }
                           }}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
@@ -1780,11 +2052,14 @@ export default function VHSCollectionTracker() {
                   <div
                     key={master.id}
                     className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer"
-                    onClick={() => setSelectedMaster(master)}
+                    onClick={async () => {
+                      const variants = await loadVariantsForMaster(master.id);
+                      setSelectedMaster({ ...master, variants });
+                    }}
                   >
                     <div className="flex gap-4 items-start">
                       {master.poster_url ? (
-                        <img
+                        <img loading="lazy"
                           src={master.poster_url}
                           alt={`${master.title} poster`}
                           className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
@@ -1804,17 +2079,26 @@ export default function VHSCollectionTracker() {
                             <span className="font-medium">{master.avg_rating || 0}</span>
                             <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
                           </div>
-                          <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
+                          <p className="text-sm text-purple-600">{master.variant_count || 0} variant(s)</p>
                         </div>
                       </div>
                     </div>
                   </div>
                 ))}
                 {filteredMasters.length === 0 && (
-                  <div className="bg-white rounded-lg shadow p-12 text-center">
-                    <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg">No titles found</p>
-                    <p className="text-gray-500 mt-2">Try a different search or add a new title</p>
+                  <div className="bg-gradient-to-br from-gray-50 to-purple-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-gray-300">
+                    <div className="relative inline-block mb-6">
+                      <Film className="w-24 h-24 text-gray-400 mx-auto" />
+                      <div className="absolute inset-0 bg-gray-400 rounded-full opacity-20 blur-xl"></div>
+                    </div>
+                    <h3 className="text-3xl font-bold text-gray-800 mb-3">No Titles Found</h3>
+                    <p className="text-gray-600 text-lg mb-6">Try a different search or add a new title</p>
+                    <button
+                      onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
+                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                    >
+                      Add New Title
+                    </button>
                   </div>
                 )}
               </div>
@@ -1841,7 +2125,7 @@ export default function VHSCollectionTracker() {
                             variantFormat: 'VHS',
                             variantRegion: '',
                             variantRelease: '',
-                            variantPackaging: '',
+                            variantCaseType: '',
                             variantNotes: '',
                             variantBarcode: '',
                             imageCover: null,
@@ -1870,7 +2154,7 @@ export default function VHSCollectionTracker() {
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                   <div className="flex gap-6 mb-4">
                     {selectedMaster.poster_url ? (
-                      <img
+                      <img loading="lazy"
                         src={selectedMaster.poster_url}
                         alt={`${selectedMaster.title} poster`}
                         className="w-48 h-72 object-cover rounded shadow-lg flex-shrink-0 cursor-pointer hover:shadow-xl transition"
@@ -1896,7 +2180,21 @@ export default function VHSCollectionTracker() {
 
                 <div className="bg-white rounded-lg shadow-lg p-6">
                   <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-bold text-gray-800">Variants</h2>
+                    <div className="flex items-center gap-4">
+                      <h2 className="text-2xl font-bold text-gray-800">Variants</h2>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Sort by:</span>
+                        <select
+                          value={sortVariantsBy}
+                          onChange={(e) => setSortVariantsBy(e.target.value)}
+                          className="text-sm border border-gray-300 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        >
+                          <option value="date">Release Date</option>
+                          <option value="region">Region</option>
+                          <option value="format">Format</option>
+                        </select>
+                      </div>
+                    </div>
                     <button
                       onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
                       className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition flex items-center space-x-2"
@@ -1907,16 +2205,16 @@ export default function VHSCollectionTracker() {
                   </div>
 
                   <div className="grid gap-4">
-                    {selectedMaster.variants?.filter(v => v.approved).map(variant => {
+                    {sortVariants(selectedMaster.variants?.filter(v => v.approved)).map(variant => {
                       const inColl = isInCollection(variant.id);
                       const inWish = isInWishlist(variant.id);
                       return (
-                        <div key={variant.id} className="bg-white rounded-lg shadow p-6">
+                        <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border border-gray-100">
                           <div className="flex gap-4 items-start">
                             {/* Variant Images - Left Side */}
                             {variant.variant_images && variant.variant_images.length > 0 ? (
                               <div className="flex-shrink-0">
-                                <img
+                                <img loading="lazy"
                                   src={variant.variant_images[0].image_url}
                                   alt="Variant cover"
                                   className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
@@ -1925,7 +2223,7 @@ export default function VHSCollectionTracker() {
                                 {variant.variant_images.length > 1 && (
                                   <div className="flex mt-2 space-x-1">
                                     {variant.variant_images.slice(1, 4).map((img, idx) => (
-                                      <img
+                                      <img loading="lazy"
                                         key={idx}
                                         src={img.image_url}
                                         alt={`Variant ${idx + 2}`}
@@ -1968,7 +2266,7 @@ export default function VHSCollectionTracker() {
                                 <span className="font-semibold">Release:</span> {variant.release_year}
                               </p>
                               <p className="text-gray-700 mb-1">
-                                <span className="font-semibold">Packaging:</span> {variant.packaging}
+                                <span className="font-semibold">Case Type:</span> {variant.case_type}
                               </p>
                               <p className="text-gray-700 mb-1">
                                 <span className="font-semibold">Barcode:</span> {variant.barcode}
@@ -2027,7 +2325,7 @@ export default function VHSCollectionTracker() {
                                         variantFormat: variant.format,
                                         variantRegion: variant.region,
                                         variantRelease: variant.release_year,
-                                        variantPackaging: variant.packaging,
+                                        variantCaseType: variant.case_type,
                                         variantNotes: variant.notes || '',
                                         variantBarcode: variant.barcode || '',
                                         imageCover: coverImg ? { preview: coverImg.image_url, existing: true } : null,
@@ -2066,12 +2364,21 @@ export default function VHSCollectionTracker() {
 
         {view === 'collection' && (
           <>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">My Collection</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-8">My Collection</h2>
             {collection.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-12 text-center">
-                <Film className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">Your collection is empty</p>
-                <p className="text-gray-500 mt-2">Browse the database to add tapes</p>
+              <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
+                <div className="relative inline-block mb-6">
+                  <Film className="w-24 h-24 text-purple-400 mx-auto" />
+                  <div className="absolute inset-0 bg-purple-400 rounded-full opacity-20 blur-xl"></div>
+                </div>
+                <h3 className="text-3xl font-bold text-gray-800 mb-3">Your Vault is Empty!</h3>
+                <p className="text-gray-600 text-lg mb-6">Time to start building your VHS empire</p>
+                <button
+                  onClick={() => setView('search')}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                >
+                  Browse Tapes
+                </button>
               </div>
             ) : (
               <div className="grid gap-4">
@@ -2081,7 +2388,7 @@ export default function VHSCollectionTracker() {
                       {/* Variant Images - Left Side */}
                       {item.variant.variant_images && item.variant.variant_images.length > 0 ? (
                         <div className="flex-shrink-0">
-                          <img
+                          <img loading="lazy"
                             src={item.variant.variant_images[0].image_url}
                             alt="Variant cover"
                             className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
@@ -2090,7 +2397,7 @@ export default function VHSCollectionTracker() {
                           {item.variant.variant_images.length > 1 && (
                             <div className="flex mt-2 space-x-1">
                               {item.variant.variant_images.slice(1, 4).map((img, imgIdx) => (
-                                <img
+                                <img loading="lazy"
                                   key={imgIdx}
                                   src={img.image_url}
                                   alt={`Variant ${imgIdx + 2}`}
@@ -2124,9 +2431,31 @@ export default function VHSCollectionTracker() {
                             {item.variant.region}
                           </span>
                         </div>
-                        <p className="text-gray-700 text-sm">
-                          {item.variant.release_year} • {item.variant.packaging}
+                        <p className="text-gray-700 text-sm mb-3">
+                          {item.variant.release_year} • {item.variant.case_type}
                         </p>
+
+                        {/* Personal Collection Details */}
+                        {(collection.find(c => c.variant_id === item.variant.id)?.condition || collection.find(c => c.variant_id === item.variant.id)?.notes) && (
+                          <div className="border-t pt-3 mt-3">
+                            {collection.find(c => c.variant_id === item.variant.id)?.condition && (
+                              <div className="mb-2">
+                                <span className="text-sm font-semibold text-gray-700">Condition: </span>
+                                <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-sm">
+                                  {collection.find(c => c.variant_id === item.variant.id).condition}
+                                </span>
+                              </div>
+                            )}
+                            {collection.find(c => c.variant_id === item.variant.id)?.notes && (
+                              <div>
+                                <p className="text-sm font-semibold text-gray-700">My Notes:</p>
+                                <p className="text-sm text-gray-600 italic mt-1">
+                                  {collection.find(c => c.variant_id === item.variant.id).notes}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Remove Button - Right Side */}
@@ -2147,12 +2476,21 @@ export default function VHSCollectionTracker() {
 
         {view === 'wishlist' && (
           <>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">My Wishlist</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-8">My Wishlist</h2>
             {wishlist.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-12 text-center">
-                <Heart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">Your wishlist is empty</p>
-                <p className="text-gray-500 mt-2">Add tapes you want to find</p>
+              <div className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-pink-300">
+                <div className="relative inline-block mb-6">
+                  <Heart className="w-24 h-24 text-pink-400 mx-auto" />
+                  <div className="absolute inset-0 bg-pink-400 rounded-full opacity-20 blur-xl"></div>
+                </div>
+                <h3 className="text-3xl font-bold text-gray-800 mb-3">No Wishlist Items Yet</h3>
+                <p className="text-gray-600 text-lg mb-6">Start building your dream collection</p>
+                <button
+                  onClick={() => setView('search')}
+                  className="bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                >
+                  Find Tapes
+                </button>
               </div>
             ) : (
               <div className="grid gap-4">
@@ -2312,7 +2650,7 @@ export default function VHSCollectionTracker() {
                         {/* Variant Images - Left Side */}
                         {submission.variant_images && submission.variant_images.length > 0 ? (
                           <div className="flex-shrink-0">
-                            <img
+                            <img loading="lazy"
                               src={submission.variant_images[0].image_url}
                               alt="Variant cover"
                               className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
@@ -2321,7 +2659,7 @@ export default function VHSCollectionTracker() {
                             {submission.variant_images.length > 1 && (
                               <div className="flex mt-2 space-x-1">
                                 {submission.variant_images.slice(1, 4).map((img, idx) => (
-                                  <img
+                                  <img loading="lazy"
                                     key={idx}
                                     src={img.image_url}
                                     alt={`Variant ${idx + 2}`}
@@ -2362,8 +2700,8 @@ export default function VHSCollectionTracker() {
                               <p className="text-gray-600">{submission.release_year}</p>
                             </div>
                             <div>
-                              <p className="text-sm font-semibold text-gray-700 mb-1">Packaging</p>
-                              <p className="text-gray-600">{submission.packaging}</p>
+                              <p className="text-sm font-semibold text-gray-700 mb-1">Case Type</p>
+                              <p className="text-gray-600">{submission.case_type}</p>
                             </div>
                             {submission.barcode && (
                               <div className="md:col-span-2">
@@ -2454,7 +2792,7 @@ export default function VHSCollectionTracker() {
                               className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                             >
                               {movie.poster_path ? (
-                                <img
+                                <img loading="lazy"
                                   src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
                                   alt={movie.title}
                                   className="w-12 h-18 object-cover rounded mr-3"
@@ -2586,22 +2924,17 @@ export default function VHSCollectionTracker() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Packaging</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Case Type</label>
                         <select
-                          value={newSubmission.variantPackaging}
-                          onChange={(e) => setNewSubmission({...newSubmission, variantPackaging: e.target.value})}
+                          value={newSubmission.variantCaseType}
+                          onChange={(e) => setNewSubmission({...newSubmission, variantCaseType: e.target.value})}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         >
-                          <option value="">Select Packaging</option>
+                          <option value="">Select Case Type</option>
+                          <option value="Slipcase">Slipcase</option>
                           <option value="Clamshell">Clamshell</option>
-                          <option value="Slipcover">Slipcover</option>
-                          <option value="Cardboard Sleeve">Cardboard Sleeve</option>
-                          <option value="Plastic Case">Plastic Case</option>
                           <option value="Big Box">Big Box</option>
-                          <option value="Standard Case">Standard Case</option>
-                          <option value="Rental Case">Rental Case</option>
-                          <option value="Screener">Screener</option>
-                          <option value="Promotional">Promotional</option>
+                          <option value="Other">Other</option>
                         </select>
                       </div>
                     </div>
@@ -2616,14 +2949,134 @@ export default function VHSCollectionTracker() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Variant Notes (Optional)</label>
                       <textarea
                         value={newSubmission.variantNotes}
                         onChange={(e) => setNewSubmission({...newSubmission, variantNotes: e.target.value})}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         rows="3"
-                        placeholder="Special edition notes, condition, etc."
+                        placeholder="Release-specific notes (e.g., special edition features, rental version, etc.)"
                       />
+                    </div>
+
+                    {/* Advanced Fields Section */}
+                    <div className="border-t pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvancedFields(!showAdvancedFields)}
+                        className="flex items-center justify-between w-full text-left text-sm font-semibold text-gray-700 hover:text-purple-600 transition"
+                      >
+                        <span>Advanced Fields (Optional)</span>
+                        <ChevronRight className={`w-5 h-5 transition-transform ${showAdvancedFields ? 'rotate-90' : ''}`} />
+                      </button>
+
+                      {showAdvancedFields && (
+                        <div className="mt-4 space-y-4 pl-4 border-l-2 border-purple-200">
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Edition Type</label>
+                              <select
+                                value={newSubmission.editionType}
+                                onChange={(e) => setNewSubmission({...newSubmission, editionType: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Edition Type</option>
+                                <option value="Retail">Retail</option>
+                                <option value="Promotional">Promotional</option>
+                                <option value="Screener">Screener</option>
+                                <option value="Bootleg">Bootleg</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Audio Language</label>
+                              <select
+                                value={newSubmission.audioLanguage}
+                                onChange={(e) => setNewSubmission({...newSubmission, audioLanguage: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Language</option>
+                                <option value="English">English</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="French">French</option>
+                                <option value="Japanese">Japanese</option>
+                                <option value="Chinese">Chinese</option>
+                                <option value="German">German</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Subtitles</label>
+                              <select
+                                value={newSubmission.subtitles === null ? '' : newSubmission.subtitles.toString()}
+                                onChange={(e) => setNewSubmission({...newSubmission, subtitles: e.target.value === '' ? null : e.target.value === 'true'})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Unknown</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Original Rating</label>
+                              <select
+                                value={newSubmission.originalRating}
+                                onChange={(e) => setNewSubmission({...newSubmission, originalRating: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Rating</option>
+                                <option value="G">G</option>
+                                <option value="PG">PG</option>
+                                <option value="PG-13">PG-13</option>
+                                <option value="R">R</option>
+                                <option value="NC-17">NC-17</option>
+                                <option value="18+">18+</option>
+                                <option value="Not Rated">Not Rated</option>
+                                <option value="Unrated">Unrated</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Aspect Ratio</label>
+                              <select
+                                value={newSubmission.aspectRatio}
+                                onChange={(e) => setNewSubmission({...newSubmission, aspectRatio: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Aspect Ratio</option>
+                                <option value="4:3 (Fullscreen)">4:3 (Fullscreen)</option>
+                                <option value="1.85:1 (Widescreen)">1.85:1 (Widescreen)</option>
+                                <option value="2.35:1 (Widescreen)">2.35:1 (Widescreen)</option>
+                                <option value="Letterboxed">Letterboxed</option>
+                                <option value="Open Matte">Open Matte</option>
+                                <option value="Pan & Scan">Pan & Scan</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Shell Color</label>
+                              <select
+                                value={newSubmission.shellColor}
+                                onChange={(e) => setNewSubmission({...newSubmission, shellColor: e.target.value})}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="">Select Shell Color</option>
+                                <option value="Black">Black</option>
+                                <option value="Clear">Clear</option>
+                                <option value="White">White</option>
+                                <option value="Gray">Gray</option>
+                                <option value="Blue">Blue</option>
+                                <option value="Red">Red</option>
+                                <option value="Green">Green</option>
+                                <option value="Yellow">Yellow</option>
+                                <option value="Orange">Orange</option>
+                                <option value="Purple">Purple</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -2636,7 +3089,7 @@ export default function VHSCollectionTracker() {
                           <label className="block text-xs font-medium text-gray-600 mb-1">Cover</label>
                           {newSubmission.imageCover ? (
                             <div className="relative group">
-                              <img
+                              <img loading="lazy"
                                 src={newSubmission.imageCover.preview}
                                 alt="Cover preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
@@ -2679,7 +3132,7 @@ export default function VHSCollectionTracker() {
                           <label className="block text-xs font-medium text-gray-600 mb-1">Back</label>
                           {newSubmission.imageBack ? (
                             <div className="relative group">
-                              <img
+                              <img loading="lazy"
                                 src={newSubmission.imageBack.preview}
                                 alt="Back preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
@@ -2719,10 +3172,10 @@ export default function VHSCollectionTracker() {
 
                         {/* Spine Image */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Spine</label>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Spine (Optional)</label>
                           {newSubmission.imageSpine ? (
                             <div className="relative group">
-                              <img
+                              <img loading="lazy"
                                 src={newSubmission.imageSpine.preview}
                                 alt="Spine preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
@@ -2762,10 +3215,10 @@ export default function VHSCollectionTracker() {
 
                         {/* Tape Label Image */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Tape Label</label>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Tape Label (Optional)</label>
                           {newSubmission.imageTapeLabel ? (
                             <div className="relative group">
-                              <img
+                              <img loading="lazy"
                                 src={newSubmission.imageTapeLabel.preview}
                                 alt="Tape Label preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
@@ -2846,6 +3299,63 @@ export default function VHSCollectionTracker() {
         </div>
       )}
 
+      {showCollectionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Add to Collection</h2>
+            <p className="text-gray-600 mb-6">Add personal details about this item in your collection.</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Condition</label>
+                <select
+                  value={collectionDetails.condition}
+                  onChange={(e) => setCollectionDetails({...collectionDetails, condition: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">Select condition...</option>
+                  <option value="Mint">Mint</option>
+                  <option value="Near Mint">Near Mint</option>
+                  <option value="Very Good">Very Good</option>
+                  <option value="Good">Good</option>
+                  <option value="Fair">Fair</option>
+                  <option value="Poor">Poor</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Personal Notes (Optional)</label>
+                <textarea
+                  value={collectionDetails.notes}
+                  onChange={(e) => setCollectionDetails({...collectionDetails, notes: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  rows="3"
+                  placeholder="Where you got it, personal memories, restoration notes, etc."
+                />
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowCollectionModal(false);
+                  setCollectionDetails({ condition: '', notes: '' });
+                }}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddToCollection}
+                className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
+              >
+                Add to Collection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {imageGallery.length > 0 && (
         <div
           className="fixed inset-0 bg-black bg-opacity-95 flex flex-col items-center justify-center p-4 z-50"
@@ -2873,7 +3383,7 @@ export default function VHSCollectionTracker() {
               )}
 
               {/* Image */}
-              <img
+              <img loading="lazy"
                 src={imageGallery[currentImageIndex]}
                 alt={`Image ${currentImageIndex + 1}`}
                 className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl"
@@ -2903,7 +3413,7 @@ export default function VHSCollectionTracker() {
                         : 'ring-2 ring-gray-500 hover:ring-white'
                     }`}
                   >
-                    <img
+                    <img loading="lazy"
                       src={img}
                       alt={`Thumbnail ${idx + 1}`}
                       className="w-20 h-20 object-cover"
