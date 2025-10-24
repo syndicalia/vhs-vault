@@ -1169,7 +1169,7 @@ export default function VHSCollectionTracker() {
                           className="flex items-center p-3 hover:bg-orange-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition"
                         >
                           {movie.poster_path ? (
-                            <img
+                            <img loading="lazy"
                               src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
                               alt={movie.title}
                               className="w-12 h-18 object-cover rounded mr-3 flex-shrink-0 shadow"
@@ -1211,7 +1211,7 @@ export default function VHSCollectionTracker() {
                     {/* Variant Images Gallery */}
                     {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
                       <div className="flex-shrink-0">
-                        <img
+                        <img loading="lazy"
                           src={selectedVariant.variant_images[0].image_url}
                           alt="Variant cover"
                           className="w-48 h-72 object-cover rounded-lg shadow-xl cursor-pointer hover:shadow-2xl hover:-translate-y-2 hover:rotate-2 transition-all duration-300 border-4 border-gray-800"
@@ -1220,7 +1220,7 @@ export default function VHSCollectionTracker() {
                         {selectedVariant.variant_images.length > 1 && (
                           <div className="grid grid-cols-3 gap-2 mt-3">
                             {selectedVariant.variant_images.slice(1, 4).map((img, idx) => (
-                              <img
+                              <img loading="lazy"
                                 key={idx}
                                 src={img.image_url}
                                 alt={`Image ${idx + 2}`}
@@ -1337,7 +1337,7 @@ export default function VHSCollectionTracker() {
                         >
                           <div className="flex gap-4 items-start">
                             {master.poster_url ? (
-                              <img
+                              <img loading="lazy"
                                 src={master.poster_url}
                                 alt={`${master.title} poster`}
                                 className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
@@ -1430,7 +1430,7 @@ export default function VHSCollectionTracker() {
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                   <div className="flex gap-6 mb-4">
                     {selectedMaster.poster_url ? (
-                      <img
+                      <img loading="lazy"
                         src={selectedMaster.poster_url}
                         alt={`${selectedMaster.title} poster`}
                         className="w-48 h-72 object-cover rounded shadow-lg flex-shrink-0 cursor-pointer hover:shadow-xl transition"
@@ -1501,7 +1501,7 @@ export default function VHSCollectionTracker() {
                           {/* Variant Images - Left Side */}
                           {variant.variant_images && variant.variant_images.length > 0 ? (
                             <div className="flex-shrink-0">
-                              <img
+                              <img loading="lazy"
                                 src={variant.variant_images[0].image_url}
                                 alt="Variant cover"
                                 className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
@@ -1510,7 +1510,7 @@ export default function VHSCollectionTracker() {
                               {variant.variant_images.length > 1 && (
                                 <div className="flex mt-2 space-x-1">
                                   {variant.variant_images.slice(1, 4).map((img, idx) => (
-                                    <img
+                                    <img loading="lazy"
                                       key={idx}
                                       src={img.image_url}
                                       alt={`Variant ${idx + 2}`}
@@ -1689,7 +1689,7 @@ export default function VHSCollectionTracker() {
                     {/* Variant Images Gallery */}
                     {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
                       <div className="flex-shrink-0">
-                        <img
+                        <img loading="lazy"
                           src={selectedVariant.variant_images[0].image_url}
                           alt="Variant cover"
                           className="w-48 h-72 object-cover rounded-lg shadow-xl cursor-pointer hover:shadow-2xl hover:-translate-y-2 hover:rotate-2 transition-all duration-300 border-4 border-gray-800"
@@ -1698,7 +1698,7 @@ export default function VHSCollectionTracker() {
                         {selectedVariant.variant_images.length > 1 && (
                           <div className="grid grid-cols-3 gap-2 mt-3">
                             {selectedVariant.variant_images.slice(1, 4).map((img, idx) => (
-                              <img
+                              <img loading="lazy"
                                 key={idx}
                                 src={img.image_url}
                                 alt={`Image ${idx + 2}`}
@@ -1811,7 +1811,7 @@ export default function VHSCollectionTracker() {
                   >
                     <div className="flex gap-4 items-start">
                       {master.poster_url ? (
-                        <img
+                        <img loading="lazy"
                           src={master.poster_url}
                           alt={`${master.title} poster`}
                           className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
@@ -1906,7 +1906,7 @@ export default function VHSCollectionTracker() {
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                   <div className="flex gap-6 mb-4">
                     {selectedMaster.poster_url ? (
-                      <img
+                      <img loading="lazy"
                         src={selectedMaster.poster_url}
                         alt={`${selectedMaster.title} poster`}
                         className="w-48 h-72 object-cover rounded shadow-lg flex-shrink-0 cursor-pointer hover:shadow-xl transition"
@@ -1952,7 +1952,7 @@ export default function VHSCollectionTracker() {
                             {/* Variant Images - Left Side */}
                             {variant.variant_images && variant.variant_images.length > 0 ? (
                               <div className="flex-shrink-0">
-                                <img
+                                <img loading="lazy"
                                   src={variant.variant_images[0].image_url}
                                   alt="Variant cover"
                                   className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
@@ -1961,7 +1961,7 @@ export default function VHSCollectionTracker() {
                                 {variant.variant_images.length > 1 && (
                                   <div className="flex mt-2 space-x-1">
                                     {variant.variant_images.slice(1, 4).map((img, idx) => (
-                                      <img
+                                      <img loading="lazy"
                                         key={idx}
                                         src={img.image_url}
                                         alt={`Variant ${idx + 2}`}
@@ -2126,7 +2126,7 @@ export default function VHSCollectionTracker() {
                       {/* Variant Images - Left Side */}
                       {item.variant.variant_images && item.variant.variant_images.length > 0 ? (
                         <div className="flex-shrink-0">
-                          <img
+                          <img loading="lazy"
                             src={item.variant.variant_images[0].image_url}
                             alt="Variant cover"
                             className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
@@ -2135,7 +2135,7 @@ export default function VHSCollectionTracker() {
                           {item.variant.variant_images.length > 1 && (
                             <div className="flex mt-2 space-x-1">
                               {item.variant.variant_images.slice(1, 4).map((img, imgIdx) => (
-                                <img
+                                <img loading="lazy"
                                   key={imgIdx}
                                   src={img.image_url}
                                   alt={`Variant ${imgIdx + 2}`}
@@ -2388,7 +2388,7 @@ export default function VHSCollectionTracker() {
                         {/* Variant Images - Left Side */}
                         {submission.variant_images && submission.variant_images.length > 0 ? (
                           <div className="flex-shrink-0">
-                            <img
+                            <img loading="lazy"
                               src={submission.variant_images[0].image_url}
                               alt="Variant cover"
                               className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
@@ -2397,7 +2397,7 @@ export default function VHSCollectionTracker() {
                             {submission.variant_images.length > 1 && (
                               <div className="flex mt-2 space-x-1">
                                 {submission.variant_images.slice(1, 4).map((img, idx) => (
-                                  <img
+                                  <img loading="lazy"
                                     key={idx}
                                     src={img.image_url}
                                     alt={`Variant ${idx + 2}`}
@@ -2530,7 +2530,7 @@ export default function VHSCollectionTracker() {
                               className="flex items-center p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                             >
                               {movie.poster_path ? (
-                                <img
+                                <img loading="lazy"
                                   src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
                                   alt={movie.title}
                                   className="w-12 h-18 object-cover rounded mr-3"
@@ -2712,7 +2712,7 @@ export default function VHSCollectionTracker() {
                           <label className="block text-xs font-medium text-gray-600 mb-1">Cover</label>
                           {newSubmission.imageCover ? (
                             <div className="relative group">
-                              <img
+                              <img loading="lazy"
                                 src={newSubmission.imageCover.preview}
                                 alt="Cover preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
@@ -2755,7 +2755,7 @@ export default function VHSCollectionTracker() {
                           <label className="block text-xs font-medium text-gray-600 mb-1">Back</label>
                           {newSubmission.imageBack ? (
                             <div className="relative group">
-                              <img
+                              <img loading="lazy"
                                 src={newSubmission.imageBack.preview}
                                 alt="Back preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
@@ -2798,7 +2798,7 @@ export default function VHSCollectionTracker() {
                           <label className="block text-xs font-medium text-gray-600 mb-1">Spine</label>
                           {newSubmission.imageSpine ? (
                             <div className="relative group">
-                              <img
+                              <img loading="lazy"
                                 src={newSubmission.imageSpine.preview}
                                 alt="Spine preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
@@ -2841,7 +2841,7 @@ export default function VHSCollectionTracker() {
                           <label className="block text-xs font-medium text-gray-600 mb-1">Tape Label</label>
                           {newSubmission.imageTapeLabel ? (
                             <div className="relative group">
-                              <img
+                              <img loading="lazy"
                                 src={newSubmission.imageTapeLabel.preview}
                                 alt="Tape Label preview"
                                 className="w-full h-32 object-cover rounded border-2 border-gray-300"
@@ -3006,7 +3006,7 @@ export default function VHSCollectionTracker() {
               )}
 
               {/* Image */}
-              <img
+              <img loading="lazy"
                 src={imageGallery[currentImageIndex]}
                 alt={`Image ${currentImageIndex + 1}`}
                 className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl"
@@ -3036,7 +3036,7 @@ export default function VHSCollectionTracker() {
                         : 'ring-2 ring-gray-500 hover:ring-white'
                     }`}
                   >
-                    <img
+                    <img loading="lazy"
                       src={img}
                       alt={`Thumbnail ${idx + 1}`}
                       className="w-20 h-20 object-cover"
