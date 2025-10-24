@@ -45,6 +45,7 @@ export default function VHSCollectionTracker() {
   const [tmdbSearching, setTmdbSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [sortVariantsBy, setSortVariantsBy] = useState('date'); // 'date', 'region', 'format'
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -991,6 +992,21 @@ export default function VHSCollectionTracker() {
     master.director.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const sortVariants = (variants) => {
+    if (!variants) return [];
+    const sorted = [...variants];
+    switch (sortVariantsBy) {
+      case 'date':
+        return sorted.sort((a, b) => parseInt(a.release_year) - parseInt(b.release_year));
+      case 'region':
+        return sorted.sort((a, b) => a.region.localeCompare(b.region));
+      case 'format':
+        return sorted.sort((a, b) => a.format.localeCompare(b.format));
+      default:
+        return sorted;
+    }
+  };
+
   const getCollectionItems = () => {
     return collection.map(item => {
       const master = masterReleases.find(m => m.id === item.master_id);
@@ -1622,7 +1638,21 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-2xl font-bold text-gray-900">Variants ({selectedMaster.variants?.filter(v => v.approved).length || 0})</h3>
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-2xl font-bold text-gray-900">Variants ({selectedMaster.variants?.filter(v => v.approved).length || 0})</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">Sort by:</span>
+                      <select
+                        value={sortVariantsBy}
+                        onChange={(e) => setSortVariantsBy(e.target.value)}
+                        className="text-sm border border-gray-300 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="date">Release Date</option>
+                        <option value="region">Region</option>
+                        <option value="format">Format</option>
+                      </select>
+                    </div>
+                  </div>
                   <button
                     onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition flex items-center space-x-2"
@@ -1655,7 +1685,7 @@ export default function VHSCollectionTracker() {
                       ))}
                     </>
                   ) : (
-                    selectedMaster.variants?.filter(v => v.approved).map(variant => {
+                    sortVariants(selectedMaster.variants?.filter(v => v.approved)).map(variant => {
                     const inColl = isInCollection(variant.id);
                     const inWish = isInWishlist(variant.id);
                     return (
@@ -2049,7 +2079,7 @@ export default function VHSCollectionTracker() {
                             <span className="font-medium">{master.avg_rating || 0}</span>
                             <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
                           </div>
-                          <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
+                          <p className="text-sm text-purple-600">{master.variant_count || 0} variant(s)</p>
                         </div>
                       </div>
                     </div>
@@ -2150,7 +2180,21 @@ export default function VHSCollectionTracker() {
 
                 <div className="bg-white rounded-lg shadow-lg p-6">
                   <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-bold text-gray-800">Variants</h2>
+                    <div className="flex items-center gap-4">
+                      <h2 className="text-2xl font-bold text-gray-800">Variants</h2>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Sort by:</span>
+                        <select
+                          value={sortVariantsBy}
+                          onChange={(e) => setSortVariantsBy(e.target.value)}
+                          className="text-sm border border-gray-300 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        >
+                          <option value="date">Release Date</option>
+                          <option value="region">Region</option>
+                          <option value="format">Format</option>
+                        </select>
+                      </div>
+                    </div>
                     <button
                       onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
                       className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition flex items-center space-x-2"
@@ -2161,7 +2205,7 @@ export default function VHSCollectionTracker() {
                   </div>
 
                   <div className="grid gap-4">
-                    {selectedMaster.variants?.filter(v => v.approved).map(variant => {
+                    {sortVariants(selectedMaster.variants?.filter(v => v.approved)).map(variant => {
                       const inColl = isInCollection(variant.id);
                       const inWish = isInWishlist(variant.id);
                       return (
