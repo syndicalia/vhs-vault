@@ -1565,35 +1565,38 @@ export default function VHSCollectionTracker() {
                       {filteredMasters.map(master => (
                         <div
                           key={master.id}
-                          className="bg-white rounded-lg shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 cursor-pointer border border-gray-100"
+                          className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 cursor-pointer border-2 border-transparent hover:border-purple-200 group"
                           onClick={async () => {
                             const variants = await loadVariantsForMaster(master.id);
                             setSelectedMaster({ ...master, variants });
                           }}
                         >
-                          <div className="flex gap-4 items-start">
+                          <div className="flex gap-5 items-start">
                             {master.poster_url ? (
                               <img loading="lazy"
                                 src={master.poster_url}
                                 alt={`${master.title} poster`}
-                                className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
+                                className="w-24 h-36 object-cover rounded-lg shadow-lg flex-shrink-0 group-hover:-rotate-2 group-hover:scale-105 transition-all duration-300"
                               />
                             ) : (
-                              <div className="w-24 h-36 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                              <div className="w-24 h-36 bg-gradient-to-br from-purple-100 via-purple-200 to-pink-100 rounded-lg shadow-lg flex items-center justify-center flex-shrink-0 group-hover:-rotate-2 group-hover:scale-105 transition-all duration-300">
                                 <Film className="w-12 h-12 text-purple-400" />
                               </div>
                             )}
                             <div className="flex-1">
-                              <h2 className="text-xl font-bold text-gray-800 mb-1">{master.title}</h2>
-                              <p className="text-gray-600">{master.director} • {master.year} • {master.genre}</p>
-                              <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
-                              <div className="flex items-center space-x-4 mt-3">
-                                <div className="flex items-center space-x-1">
+                              <h2 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-purple-700 transition-colors">{master.title}</h2>
+                              <p className="text-gray-600 font-medium mb-1">{master.director} • {master.year}</p>
+                              <p className="text-sm text-purple-600 font-medium mb-1">{master.genre}</p>
+                              <p className="text-xs text-gray-500 mb-3">{master.studio}</p>
+                              <div className="flex items-center gap-4 mt-3">
+                                <div className="flex items-center gap-1 bg-gradient-to-r from-yellow-50 to-orange-50 px-3 py-1 rounded-full">
                                   <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                                  <span className="font-medium">{master.avg_rating || 0}</span>
-                                  <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
+                                  <span className="font-bold text-gray-800">{master.avg_rating || 0}</span>
+                                  <span className="text-gray-500 text-xs">({master.total_ratings || 0})</span>
                                 </div>
-                                <p className="text-sm text-purple-600">{master.variant_count || 0} variant(s)</p>
+                                <div className="bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
+                                  {master.variant_count || 0} variant{master.variant_count !== 1 ? 's' : ''}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1775,15 +1778,15 @@ export default function VHSCollectionTracker() {
                     const inColl = isInCollection(variant.id);
                     const inWish = isInWishlist(variant.id);
                     return (
-                      <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border border-gray-100">
-                        <div className="flex gap-4 items-start">
+                      <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border-2 border-transparent hover:border-purple-200 group">
+                        <div className="flex gap-6 items-start">
                           {/* Variant Images - Left Side */}
                           {variant.variant_images && variant.variant_images.length > 0 ? (
                             <div className="flex-shrink-0">
                               <img loading="lazy"
                                 src={variant.variant_images[0].image_url}
                                 alt="Variant cover"
-                                className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
+                                className="w-32 h-48 object-cover rounded-lg shadow-lg cursor-pointer hover:shadow-2xl hover:-rotate-2 hover:scale-105 transition-all duration-300"
                                 onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), 0)}
                               />
                               {variant.variant_images.length > 1 && (
@@ -1793,12 +1796,12 @@ export default function VHSCollectionTracker() {
                                       key={idx}
                                       src={img.image_url}
                                       alt={`Variant ${idx + 2}`}
-                                      className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                      className="w-10 h-10 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 hover:scale-110 transition-all duration-200"
                                       onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), idx + 1)}
                                     />
                                   ))}
                                   {variant.variant_images.length > 4 && (
-                                    <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded border-2 border-purple-300 flex items-center justify-center text-purple-700 text-xs font-bold">
                                       +{variant.variant_images.length - 4}
                                     </div>
                                   )}
@@ -1806,21 +1809,21 @@ export default function VHSCollectionTracker() {
                               )}
                             </div>
                           ) : (
-                            <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                            <div className="w-32 h-48 bg-gradient-to-br from-purple-100 via-purple-200 to-pink-100 rounded-lg shadow-lg flex items-center justify-center flex-shrink-0 cursor-pointer hover:scale-105 hover:-rotate-2 transition-all duration-300">
                               <Film className="w-16 h-16 text-purple-400" />
                             </div>
                           )}
 
                           {/* Variant Info - Center */}
                           <div
-                            className="flex-1 cursor-pointer hover:bg-gray-50 rounded p-2 -m-2 transition"
+                            className="flex-1 cursor-pointer hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent rounded-lg p-3 -m-3 transition-all duration-200"
                             onClick={() => setSelectedVariant(variant)}
                           >
-                            <div className="flex items-center space-x-2 mb-2">
-                              <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                            <div className="flex items-center space-x-2 mb-3">
+                              <span className="bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                 {variant.format}
                               </span>
-                              <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                              <span className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                 {variant.region}
                               </span>
                               <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm flex items-center space-x-1">
@@ -2302,15 +2305,15 @@ export default function VHSCollectionTracker() {
                       const inColl = isInCollection(variant.id);
                       const inWish = isInWishlist(variant.id);
                       return (
-                        <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border border-gray-100">
-                          <div className="flex gap-4 items-start">
+                        <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border-2 border-transparent hover:border-purple-200 group">
+                          <div className="flex gap-6 items-start">
                             {/* Variant Images - Left Side */}
                             {variant.variant_images && variant.variant_images.length > 0 ? (
                               <div className="flex-shrink-0">
                                 <img loading="lazy"
                                   src={variant.variant_images[0].image_url}
                                   alt="Variant cover"
-                                  className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
+                                  className="w-32 h-48 object-cover rounded-lg shadow-lg cursor-pointer hover:shadow-2xl hover:-rotate-2 hover:scale-105 transition-all duration-300"
                                   onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), 0)}
                                 />
                                 {variant.variant_images.length > 1 && (
@@ -2320,12 +2323,12 @@ export default function VHSCollectionTracker() {
                                         key={idx}
                                         src={img.image_url}
                                         alt={`Variant ${idx + 2}`}
-                                        className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                        className="w-10 h-10 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 hover:scale-110 transition-all duration-200"
                                         onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), idx + 1)}
                                       />
                                     ))}
                                     {variant.variant_images.length > 4 && (
-                                      <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                      <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded border-2 border-purple-300 flex items-center justify-center text-purple-700 text-xs font-bold">
                                         +{variant.variant_images.length - 4}
                                       </div>
                                     )}
@@ -2333,21 +2336,21 @@ export default function VHSCollectionTracker() {
                                 )}
                               </div>
                             ) : (
-                              <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                              <div className="w-32 h-48 bg-gradient-to-br from-purple-100 via-purple-200 to-pink-100 rounded-lg shadow-lg flex items-center justify-center flex-shrink-0 cursor-pointer hover:scale-105 hover:-rotate-2 transition-all duration-300">
                                 <Film className="w-16 h-16 text-purple-400" />
                               </div>
                             )}
 
                             {/* Variant Info - Center */}
                             <div
-                              className="flex-1 cursor-pointer hover:bg-gray-50 rounded p-2 -m-2 transition"
+                              className="flex-1 cursor-pointer hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent rounded-lg p-3 -m-3 transition-all duration-200"
                               onClick={() => setSelectedVariant(variant)}
                             >
-                              <div className="flex items-center space-x-2 mb-2">
-                                <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                              <div className="flex items-center space-x-2 mb-3">
+                                <span className="bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                   {variant.format}
                                 </span>
-                                <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                                <span className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                   {variant.region}
                                 </span>
                                 <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm flex items-center space-x-1">
@@ -2499,15 +2502,15 @@ export default function VHSCollectionTracker() {
             ) : (
               <div className="grid gap-4">
                 {sortCollectionItems(collectionItems).map((item, idx) => (
-                  <div key={idx} className="bg-white rounded-lg shadow p-6">
-                    <div className="flex gap-4 items-start">
+                  <div key={idx} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 border-2 border-transparent hover:border-purple-200">
+                    <div className="flex gap-6 items-start">
                       {/* Variant Images - Left Side */}
                       {item.variant.variant_images && item.variant.variant_images.length > 0 ? (
                         <div className="flex-shrink-0">
                           <img loading="lazy"
                             src={item.variant.variant_images[0].image_url}
                             alt="Variant cover"
-                            className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
+                            className="w-32 h-48 object-cover rounded-lg shadow-lg cursor-pointer hover:shadow-2xl hover:-rotate-2 hover:scale-105 transition-all duration-300"
                             onClick={() => openImageGallery(item.variant.variant_images.map(img => img.image_url), 0)}
                           />
                           {item.variant.variant_images.length > 1 && (
@@ -2517,12 +2520,12 @@ export default function VHSCollectionTracker() {
                                   key={imgIdx}
                                   src={img.image_url}
                                   alt={`Variant ${imgIdx + 2}`}
-                                  className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                  className="w-10 h-10 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 hover:scale-110 transition-all duration-200"
                                   onClick={() => openImageGallery(item.variant.variant_images.map(img => img.image_url), imgIdx + 1)}
                                 />
                               ))}
                               {item.variant.variant_images.length > 4 && (
-                                <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded border-2 border-purple-300 flex items-center justify-center text-purple-700 text-xs font-bold">
                                   +{item.variant.variant_images.length - 4}
                                 </div>
                               )}
@@ -2530,42 +2533,58 @@ export default function VHSCollectionTracker() {
                           )}
                         </div>
                       ) : (
-                        <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                        <div className="w-32 h-48 bg-gradient-to-br from-purple-100 via-purple-200 to-pink-100 rounded-lg shadow-lg flex items-center justify-center flex-shrink-0 cursor-pointer hover:scale-105 hover:-rotate-2 transition-all duration-300">
                           <Film className="w-16 h-16 text-purple-400" />
                         </div>
                       )}
 
-                      {/* Variant Info - Center */}
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-800 mb-2">{item.master.title}</h3>
-                        <p className="text-gray-600 mb-3">{item.master.director} • {item.master.year}</p>
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                      {/* Variant Info - Center - Clickable */}
+                      <div
+                        className="flex-1 cursor-pointer hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent rounded-lg p-3 -m-3 transition-all duration-200"
+                        onClick={() => setSelectedVariant(item.variant)}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-xl font-bold text-gray-800">{item.master.title}</h3>
+                          <span className="text-purple-600 text-sm">→ View Details</span>
+                        </div>
+                        <p className="text-gray-600 mb-3 flex items-center gap-2">
+                          <span className="font-medium">{item.master.director}</span>
+                          <span className="text-gray-400">•</span>
+                          <span>{item.master.year}</span>
+                        </p>
+                        <div className="flex items-center flex-wrap gap-2 mb-3">
+                          <span className="bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                             {item.variant.format}
                           </span>
-                          <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                          <span className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                             {item.variant.region}
                           </span>
+                          <span className="text-gray-600 text-sm">
+                            {item.variant.release_year}
+                          </span>
+                          {item.variant.case_type && (
+                            <>
+                              <span className="text-gray-400">•</span>
+                              <span className="text-gray-600 text-sm">{item.variant.case_type}</span>
+                            </>
+                          )}
                         </div>
-                        <p className="text-gray-700 text-sm mb-3">
-                          {item.variant.release_year} • {item.variant.case_type}
-                        </p>
 
                         {/* Personal Collection Details */}
                         {(collection.find(c => c.variant_id === item.variant.id)?.condition || collection.find(c => c.variant_id === item.variant.id)?.notes) && (
-                          <div className="border-t pt-3 mt-3">
+                          <div className="border-t-2 border-purple-100 pt-3 mt-3 bg-gradient-to-r from-purple-50 to-transparent -mx-3 px-3 py-2 rounded">
                             {collection.find(c => c.variant_id === item.variant.id)?.condition && (
-                              <div className="mb-2">
-                                <span className="text-sm font-semibold text-gray-700">Condition: </span>
-                                <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-sm">
+                              <div className="mb-2 flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-700">Condition:</span>
+                                <span className="bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                   {collection.find(c => c.variant_id === item.variant.id).condition}
                                 </span>
                               </div>
                             )}
                             {collection.find(c => c.variant_id === item.variant.id)?.notes && (
                               <div>
-                                <p className="text-sm font-semibold text-gray-700">My Notes:</p>
-                                <p className="text-sm text-gray-600 italic mt-1">
+                                <p className="text-sm font-semibold text-gray-700 mb-1">My Notes:</p>
+                                <p className="text-sm text-gray-600 italic bg-white bg-opacity-50 rounded p-2 border-l-4 border-purple-300">
                                   {collection.find(c => c.variant_id === item.variant.id).notes}
                                 </p>
                               </div>
@@ -2576,11 +2595,14 @@ export default function VHSCollectionTracker() {
 
                       {/* Remove Button - Right Side */}
                       <button
-                        onClick={() => removeFromCollection(item.variant.id)}
-                        className="flex-shrink-0 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center space-x-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromCollection(item.variant.id);
+                        }}
+                        className="flex-shrink-0 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center space-x-2 shadow-md hover:shadow-lg hover:-translate-y-0.5"
                       >
                         <X className="w-4 h-4" />
-                        <span>Remove</span>
+                        <span className="font-semibold">Remove</span>
                       </button>
                     </div>
                   </div>
