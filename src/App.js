@@ -608,6 +608,7 @@ export default function VHSCollectionTracker() {
     });
 
     setSubmitType('variant');
+    setSelectedMaster(quickAddMaster); // Set the master so submission can access master.id
     setTmdbMovieSelected(true); // Lock master fields
     setShowQuickAddModal(false);
     setShowSubmitModal(true);
@@ -1210,6 +1211,7 @@ export default function VHSCollectionTracker() {
       setShowSubmitModal(false);
       setTmdbMovieSelected(false); // Reset TMDB lock
       setShowAdvancedFields(false); // Reset advanced fields visibility
+      setSelectedMaster(null); // Clear selected master
       setNewSubmission({
         masterTitle: '', year: '', director: '', studio: '', genre: '',
         variantFormat: 'VHS', variantRegion: '', variantRelease: '',
@@ -3109,6 +3111,7 @@ export default function VHSCollectionTracker() {
                     setTmdbMovieSelected(false); // Reset TMDB lock
                     setEditingMaster(null);
                     setEditingVariant(null);
+                    setSelectedMaster(null);
                   }}
                   className="p-2 hover:bg-gray-100 rounded-lg transition"
                 >
@@ -3668,6 +3671,7 @@ export default function VHSCollectionTracker() {
                       setTmdbMovieSelected(false); // Reset TMDB lock
                       setEditingMaster(null);
                       setEditingVariant(null);
+                      setSelectedMaster(null);
                     }}
                     className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
                   >
