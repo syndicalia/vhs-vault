@@ -419,8 +419,11 @@ export default function VHSCollectionTracker() {
         .eq('user_id', user.id)
         .eq('variant_id', variantId);
 
-      if (!error) {
-        loadUserCollection();
+      if (error) {
+        console.error('Error updating collection:', error);
+        showToast('Failed to update collection item!', 'error');
+      } else {
+        await loadUserCollection();
         setShowCollectionModal(false);
         setCollectionDetails({ condition: '', notes: '' });
         showToast('Collection item updated!');
@@ -437,8 +440,11 @@ export default function VHSCollectionTracker() {
           notes: notes
         }]);
 
-      if (!error) {
-        loadUserCollection();
+      if (error) {
+        console.error('Error adding to collection:', error);
+        showToast('Failed to add to collection!', 'error');
+      } else {
+        await loadUserCollection();
         setShowCollectionModal(false);
         setCollectionDetails({ condition: '', notes: '' });
         showToast('Added to collection!');
