@@ -405,20 +405,44 @@ export default function VHSCollectionTracker() {
   };
 
   const addToCollection = async (masterId, variantId, condition = null, notes = null) => {
-    const { error } = await supabase
-      .from('user_collections')
-      .insert([{
-        user_id: user.id,
-        master_id: masterId,
-        variant_id: variantId,
-        condition: condition,
-        notes: notes
-      }]);
+    // Check if item already exists in collection
+    const existingItem = collection.find(item => item.variant_id === variantId);
 
-    if (!error) {
-      loadUserCollection();
-      setShowCollectionModal(false);
-      setCollectionDetails({ condition: '', notes: '' });
+    if (existingItem) {
+      // Update existing item
+      const { error } = await supabase
+        .from('user_collections')
+        .update({
+          condition: condition,
+          notes: notes
+        })
+        .eq('user_id', user.id)
+        .eq('variant_id', variantId);
+
+      if (!error) {
+        loadUserCollection();
+        setShowCollectionModal(false);
+        setCollectionDetails({ condition: '', notes: '' });
+        showToast('Collection item updated!');
+      }
+    } else {
+      // Insert new item
+      const { error } = await supabase
+        .from('user_collections')
+        .insert([{
+          user_id: user.id,
+          master_id: masterId,
+          variant_id: variantId,
+          condition: condition,
+          notes: notes
+        }]);
+
+      if (!error) {
+        loadUserCollection();
+        setShowCollectionModal(false);
+        setCollectionDetails({ condition: '', notes: '' });
+        showToast('Added to collection!');
+      }
     }
   };
 
@@ -827,6 +851,12 @@ export default function VHSCollectionTracker() {
 
   const handleSubmitEntry = async () => {
     try {
+      // Validate TMDB selection for new master submissions
+      if (submitType === 'master' && !editingMaster && !masterFieldsLocked) {
+        showToast('You must select a movie from TMDB before submitting!', 'error');
+        return;
+      }
+
       // Validate required fields for variants
       if (!editingMaster) {
         if (!newSubmission.variantRegion) {
@@ -2937,18 +2967,30 @@ export default function VHSCollectionTracker() {
                       <input
                         type="text"
                         value={newSubmission.masterTitle}
-                        readOnly={masterFieldsLocked}
                         onChange={(e) => {
                           const value = e.target.value;
-                          setNewSubmission({...newSubmission, masterTitle: value});
+                          // If fields were locked and user types, unlock them and clear other fields
+                          if (masterFieldsLocked) {
+                            setMasterFieldsLocked(false);
+                            setNewSubmission({
+                              ...newSubmission,
+                              masterTitle: value,
+                              year: '',
+                              director: '',
+                              studio: '',
+                              genre: ''
+                            });
+                          } else {
+                            setNewSubmission({...newSubmission, masterTitle: value});
+                          }
                           handleTitleSearch(value);
                         }}
                         onFocus={() => {
-                          if (tmdbSearchResults.length > 0 && !masterFieldsLocked) {
+                          if (tmdbSearchResults.length > 0) {
                             setShowTmdbDropdown(true);
                           }
                         }}
-                        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${masterFieldsLocked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                         placeholder="Search for movie on TMDB..."
                         autoComplete="off"
                       />
@@ -3482,8 +3524,12 @@ export default function VHSCollectionTracker() {
       {showCollectionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Add to Collection</h2>
-            <p className="text-gray-600 mb-6">Add personal details about this item in your collection.</p>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              {collection.find(item => item.variant_id === collectionToAdd.variantId) ? 'Edit Collection Item' : 'Add to Collection'}
+            </h2>
+            <p className="text-gray-600 mb-6">
+              {collection.find(item => item.variant_id === collectionToAdd.variantId) ? 'Update personal details about this item.' : 'Add personal details about this item in your collection.'}
+            </p>
 
             <div className="space-y-4">
               <div>
@@ -3529,7 +3575,7 @@ export default function VHSCollectionTracker() {
                 onClick={handleAddToCollection}
                 className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
               >
-                Add to Collection
+                {collection.find(item => item.variant_id === collectionToAdd.variantId) ? 'Update' : 'Add to Collection'}
               </button>
             </div>
           </div>
