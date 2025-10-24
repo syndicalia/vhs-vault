@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, Loader } from 'lucide-react';
 
 const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -38,6 +38,12 @@ export default function VHSCollectionTracker() {
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [collectionToAdd, setCollectionToAdd] = useState({ masterId: null, variantId: null });
   const [collectionDetails, setCollectionDetails] = useState({ condition: '', notes: '' });
+
+  // Toast and loading states
+  const [toast, setToast] = useState(null);
+  const [loadingVariants, setLoadingVariants] = useState(false);
+  const [tmdbSearching, setTmdbSearching] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -86,6 +92,18 @@ export default function VHSCollectionTracker() {
       setView('browse');
     }
   }, [isAdmin]);
+
+  useEffect(() => {
+    // Auto-dismiss toast after 3 seconds
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
 
   useEffect(() => {
     // Close TMDB dropdown when clicking outside
@@ -147,6 +165,7 @@ export default function VHSCollectionTracker() {
   };
 
   const loadVariantsForMaster = async (masterId) => {
+    setLoadingVariants(true);
     const { data, error } = await supabase
       .from('variants')
       .select('*, variant_images(*)')
@@ -154,8 +173,10 @@ export default function VHSCollectionTracker() {
       .eq('approved', true)
       .order('release_year', { ascending: false });
 
+    setLoadingVariants(false);
     if (error) {
       console.error('Error loading variants:', error);
+      showToast('Error loading variants', 'error');
       return [];
     }
     return data || [];
@@ -250,6 +271,7 @@ export default function VHSCollectionTracker() {
     if (!searchQuery || searchQuery.length < 2) {
       setTmdbSearchResults([]);
       setShowTmdbDropdown(false);
+      setTmdbSearching(false);
       return;
     }
 
@@ -257,6 +279,8 @@ export default function VHSCollectionTracker() {
     if (tmdbSearchTimeout) {
       clearTimeout(tmdbSearchTimeout);
     }
+
+    setTmdbSearching(true);
 
     // Set new timeout for debouncing
     const timeout = setTimeout(async () => {
@@ -270,8 +294,11 @@ export default function VHSCollectionTracker() {
           setTmdbSearchResults(data.results.slice(0, 10)); // Limit to 10 results
           setShowTmdbDropdown(true);
         }
+        setTmdbSearching(false);
       } catch (error) {
         console.error('TMDB search error:', error);
+        setTmdbSearching(false);
+        showToast('Error searching TMDB', 'error');
       }
     }, 300); // 300ms debounce
 
@@ -334,11 +361,11 @@ export default function VHSCollectionTracker() {
 
     if (isSignUp) {
       const { error } = await supabase.auth.signUp({ email, password });
-      if (error) alert(error.message);
-      else alert('Check your email for confirmation link!');
+      if (error) showToast(error.message, 'error');
+      else showToast('Check your email for confirmation link!');
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message);
+      if (error) showToast(error.message, 'error');
     }
     setLoading(false);
   };
@@ -500,7 +527,7 @@ export default function VHSCollectionTracker() {
       await loadPendingSubmissions();
     } catch (error) {
       console.error('Vote error:', error);
-      alert('Error voting: ' + error.message);
+      showToast('Error voting: ' + error.message, 'error');
     }
   };
 
@@ -549,13 +576,13 @@ export default function VHSCollectionTracker() {
       }
 
       console.log('Approval successful:', data);
-      alert('Submission approved!');
+      showToast('Submission approved!');
 
       // Reload all data to ensure consistency
       await loadAllData();
     } catch (error) {
       console.error('Error in approveSubmission:', error);
-      alert('Error approving submission: ' + error.message);
+      showToast('Error approving submission: ' + error.message, 'error');
     }
   };
 
@@ -586,10 +613,10 @@ export default function VHSCollectionTracker() {
 
       if (error) throw error;
 
-      alert('Submission rejected and deleted.');
+      showToast('Submission rejected and deleted');
       await loadPendingSubmissions();
     } catch (error) {
-      alert('Error rejecting submission: ' + error.message);
+      showToast('Error rejecting submission: ' + error.message, 'error');
     }
   };
 
@@ -622,10 +649,10 @@ export default function VHSCollectionTracker() {
 
       if (error) throw error;
 
-      alert('Variant deleted successfully.');
+      showToast('Variant deleted successfully');
       await loadAllData();
     } catch (error) {
-      alert('Error deleting variant: ' + error.message);
+      showToast('Error deleting variant: ' + error.message, 'error');
     }
   };
 
@@ -668,11 +695,11 @@ export default function VHSCollectionTracker() {
 
       if (error) throw error;
 
-      alert('Master release and all variants deleted successfully.');
+      showToast('Master release and all variants deleted successfully');
       setSelectedMaster(null);
       await loadAllData();
     } catch (error) {
-      alert('Error deleting master release: ' + error.message);
+      showToast('Error deleting master release: ' + error.message, 'error');
     }
   };
 
@@ -779,11 +806,11 @@ export default function VHSCollectionTracker() {
       // Validate required fields for variants
       if (!editingMaster) {
         if (!newSubmission.variantRegion) {
-          alert('Region is required! Please select a region before submitting.');
+          showToast('Region is required! Please select a region before submitting.', 'error');
           return;
         }
         if (!newSubmission.variantPackaging) {
-          alert('Packaging is required! Please select a packaging type before submitting.');
+          showToast('Packaging is required! Please select a packaging type before submitting.', 'error');
           return;
         }
       }
@@ -791,19 +818,19 @@ export default function VHSCollectionTracker() {
       // Validate required images for new submissions (not edits)
       if (!editingMaster && !editingVariant) {
         if (!newSubmission.imageCover) {
-          alert('Cover image is required! Please upload a cover image.');
+          showToast('Cover image is required! Please upload a cover image.', 'error');
           return;
         }
         if (!newSubmission.imageBack) {
-          alert('Back image is required! Please upload a back image.');
+          showToast('Back image is required! Please upload a back image.', 'error');
           return;
         }
         if (!newSubmission.imageSpine) {
-          alert('Spine image is required! Please upload a spine image.');
+          showToast('Spine image is required! Please upload a spine image.', 'error');
           return;
         }
         if (!newSubmission.imageTapeLabel) {
-          alert('Tape Label image is required! Please upload a tape label image.');
+          showToast('Tape Label image is required! Please upload a tape label image.', 'error');
           return;
         }
       }
@@ -827,7 +854,7 @@ export default function VHSCollectionTracker() {
 
           if (masterError) throw masterError;
 
-          alert('Master release updated successfully!');
+          showToast('Master release updated successfully!');
           setEditingMaster(null);
         } else {
           // Create new master
@@ -873,7 +900,7 @@ export default function VHSCollectionTracker() {
           if (variantError) throw variantError;
 
           await uploadImages(variant.id);
-          alert('Submission sent for review!');
+          showToast('Submission sent for review!');
         }
       } else {
         // Variant only
@@ -900,12 +927,12 @@ export default function VHSCollectionTracker() {
             await uploadImages(editingVariant.id);
           }
 
-          alert('Variant updated successfully!');
+          showToast('Variant updated successfully!');
           setEditingVariant(null);
         } else {
           // Create new variant
           if (!selectedMaster) {
-            alert('Error: No master release selected. Please select a title first.');
+            showToast('Error: No master release selected. Please select a title first.', 'error');
             return;
           }
 
@@ -928,7 +955,7 @@ export default function VHSCollectionTracker() {
           if (error) throw error;
 
           await uploadImages(variant.id);
-          alert('Submission sent for review!');
+          showToast('Submission sent for review!');
         }
       }
 
@@ -942,7 +969,7 @@ export default function VHSCollectionTracker() {
 
       loadAllData();
     } catch (error) {
-      alert('Error: ' + error.message);
+      showToast('Error: ' + error.message, 'error');
     }
   };
 
@@ -1029,6 +1056,20 @@ export default function VHSCollectionTracker() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-24 right-6 z-50 px-6 py-4 rounded-lg shadow-2xl transform transition-all duration-300 animate-bounce-in flex items-center space-x-3 ${
+          toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'
+        } text-white font-semibold`}>
+          {toast.type === 'error' ? (
+            <AlertCircle className="w-5 h-5" />
+          ) : (
+            <Check className="w-5 h-5" />
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
+
       <div className="sticky top-0 z-40 bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-600 text-white shadow-2xl border-b-4 border-orange-500">
         <div className="max-w-7xl mx-auto px-6 py-5">
           <div className="flex items-center justify-between">
@@ -1141,7 +1182,13 @@ export default function VHSCollectionTracker() {
                     className="w-full pl-10 pr-4 py-3 border-2 border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     autoComplete="off"
                   />
-                  {showTmdbDropdown && tmdbSearchResults.length > 0 && (
+                  {tmdbSearching && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-lg p-4 text-center">
+                      <Loader className="w-6 h-6 animate-spin text-orange-500 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600">Searching TMDB...</p>
+                    </div>
+                  )}
+                  {showTmdbDropdown && tmdbSearchResults.length > 0 && !tmdbSearching && (
                     <div className="absolute z-50 w-full mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-2xl max-h-96 overflow-y-auto">
                       {tmdbSearchResults.map((movie) => (
                         <div
@@ -1196,7 +1243,7 @@ export default function VHSCollectionTracker() {
                               setShowSubmitModal(true);
                             } catch (error) {
                               console.error('Error fetching TMDB details:', error);
-                              alert('Error loading movie details. Please try again.');
+                              showToast('Error loading movie details. Please try again.', 'error');
                             }
                           }}
                           className="flex items-center p-3 hover:bg-orange-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition"
@@ -1528,7 +1575,29 @@ export default function VHSCollectionTracker() {
                 </div>
 
                 <div className="grid gap-4">
-                  {selectedMaster.variants?.filter(v => v.approved).map(variant => {
+                  {loadingVariants ? (
+                    // Loading skeleton
+                    <>
+                      {[1, 2, 3].map(i => (
+                        <div key={i} className="bg-white rounded-xl shadow-lg p-6 border border-gray-100 animate-pulse">
+                          <div className="flex gap-4 items-start">
+                            <div className="w-32 h-48 bg-gray-200 rounded flex-shrink-0"></div>
+                            <div className="flex-1 space-y-3">
+                              <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+                              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                              <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                            </div>
+                            <div className="flex flex-col space-y-2">
+                              <div className="w-24 h-10 bg-gray-200 rounded"></div>
+                              <div className="w-24 h-10 bg-gray-200 rounded"></div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    selectedMaster.variants?.filter(v => v.approved).map(variant => {
                     const inColl = isInCollection(variant.id);
                     const inWish = isInWishlist(variant.id);
                     return (
@@ -1679,7 +1748,8 @@ export default function VHSCollectionTracker() {
                         </div>
                       </div>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </div>
             )}
