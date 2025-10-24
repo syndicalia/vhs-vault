@@ -119,13 +119,46 @@ export default function VHSCollectionTracker() {
   };
 
   const loadMasterReleases = async () => {
+    // Only load master data with variant count - full variants load on demand
     const { data, error } = await supabase
       .from('master_releases')
-      .select('*, variants(*, variant_images(*))');
+      .select(`
+        id,
+        title,
+        director,
+        year,
+        genre,
+        studio,
+        poster_url,
+        avg_rating,
+        total_ratings,
+        variants(count)
+      `);
 
     if (!error && data) {
-      setMasterReleases(data);
+      // Transform count result to simple variant_count property
+      const mastersWithCount = data.map(master => ({
+        ...master,
+        variant_count: master.variants?.[0]?.count || 0,
+        variants: [] // Empty array for compatibility
+      }));
+      setMasterReleases(mastersWithCount);
     }
+  };
+
+  const loadVariantsForMaster = async (masterId) => {
+    const { data, error } = await supabase
+      .from('variants')
+      .select('*, variant_images(*)')
+      .eq('master_id', masterId)
+      .eq('approved', true)
+      .order('release_year', { ascending: false });
+
+    if (error) {
+      console.error('Error loading variants:', error);
+      return [];
+    }
+    return data || [];
   };
 
   const loadUserCollection = async () => {
@@ -1333,7 +1366,10 @@ export default function VHSCollectionTracker() {
                         <div
                           key={master.id}
                           className="bg-white rounded-lg shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 cursor-pointer border border-gray-100"
-                          onClick={() => setSelectedMaster(master)}
+                          onClick={async () => {
+                            const variants = await loadVariantsForMaster(master.id);
+                            setSelectedMaster({ ...master, variants });
+                          }}
                         >
                           <div className="flex gap-4 items-start">
                             {master.poster_url ? (
@@ -1357,7 +1393,7 @@ export default function VHSCollectionTracker() {
                                   <span className="font-medium">{master.avg_rating || 0}</span>
                                   <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
                                 </div>
-                                <p className="text-sm text-purple-600">{master.variants?.length || 0} variant(s)</p>
+                                <p className="text-sm text-purple-600">{master.variant_count || 0} variant(s)</p>
                               </div>
                             </div>
                           </div>
@@ -1807,7 +1843,10 @@ export default function VHSCollectionTracker() {
                   <div
                     key={master.id}
                     className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer"
-                    onClick={() => setSelectedMaster(master)}
+                    onClick={async () => {
+                      const variants = await loadVariantsForMaster(master.id);
+                      setSelectedMaster({ ...master, variants });
+                    }}
                   >
                     <div className="flex gap-4 items-start">
                       {master.poster_url ? (
