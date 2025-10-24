@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, Loader, ChevronUp, ChevronDown } from 'lucide-react';
 
@@ -317,46 +317,47 @@ export default function VHSCollectionTracker() {
     setTmdbSearchTimeout(timeout);
   };
 
+  const fetchTmdbMovieDetails = async (movieId) => {
+    const response = await fetch(
+      `https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+    );
+    const details = await response.json();
+
+    let director = '';
+    if (details.credits?.crew) {
+      const directorObj = details.credits.crew.find(person => person.job === 'Director');
+      director = directorObj?.name || '';
+    }
+
+    let studio = '';
+    if (details.production_companies?.length > 0) {
+      studio = details.production_companies[0].name;
+    }
+
+    let genres = '';
+    if (details.genres?.length > 0) {
+      genres = details.genres.map(g => g.name).join(', ');
+    }
+
+    return { details, director, studio, genres };
+  };
+
   const selectTmdbMovie = async (movie) => {
-    // Fetch full movie details including director, studio, and genres
     try {
-      const response = await fetch(
-        `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
-      );
-      const details = await response.json();
-
-      // Extract director from crew
-      let director = '';
-      if (details.credits && details.credits.crew) {
-        const directorObj = details.credits.crew.find(person => person.job === 'Director');
-        director = directorObj ? directorObj.name : '';
-      }
-
-      // Extract production studio (first production company)
-      let studio = '';
-      if (details.production_companies && details.production_companies.length > 0) {
-        studio = details.production_companies[0].name;
-      }
-
-      // Extract genres (comma-separated)
-      let genres = '';
-      if (details.genres && details.genres.length > 0) {
-        genres = details.genres.map(g => g.name).join(', ');
-      }
+      const { director, studio, genres } = await fetchTmdbMovieDetails(movie.id);
 
       setNewSubmission({
         ...newSubmission,
         masterTitle: movie.title,
         year: movie.release_date ? movie.release_date.substring(0, 4) : '',
-        director: director,
-        studio: studio,
+        director,
+        studio,
         genre: genres
       });
       setShowTmdbDropdown(false);
       setTmdbSearchResults([]);
     } catch (error) {
       console.error('Error fetching TMDB details:', error);
-      // Fallback to basic info if detailed fetch fails
       setNewSubmission({
         ...newSubmission,
         masterTitle: movie.title,
@@ -1000,16 +1001,23 @@ export default function VHSCollectionTracker() {
     const sorted = [...variants];
     const direction = sortVariantsDirection === 'asc' ? 1 : -1;
 
+    // Build lookup map once: variant ID -> master (O(n) instead of O(n*m))
+    const variantToMaster = new Map();
+    masterReleases.forEach(master => {
+      master.variants?.forEach(variant => {
+        variantToMaster.set(variant.id, master);
+      });
+    });
+
     sorted.sort((a, b) => {
       let comparison = 0;
 
       switch (sortVariantsBy) {
         case 'date':
           comparison = (parseInt(a.release_year) || 0) - (parseInt(b.release_year) || 0);
-          // Subsort by title if dates are equal
           if (comparison === 0) {
-            const masterA = masterReleases.find(m => m.variants?.some(v => v.id === a.id));
-            const masterB = masterReleases.find(m => m.variants?.some(v => v.id === b.id));
+            const masterA = variantToMaster.get(a.id);
+            const masterB = variantToMaster.get(b.id);
             if (masterA && masterB) {
               comparison = masterA.title.localeCompare(masterB.title);
             }
@@ -1017,21 +1025,19 @@ export default function VHSCollectionTracker() {
           break;
         case 'region':
           comparison = (a.region || '').localeCompare(b.region || '');
-          // Subsort by title if regions are equal
           if (comparison === 0) {
-            const masterA = masterReleases.find(m => m.variants?.some(v => v.id === a.id));
-            const masterB = masterReleases.find(m => m.variants?.some(v => v.id === b.id));
+            const masterA = variantToMaster.get(a.id);
+            const masterB = variantToMaster.get(b.id);
             if (masterA && masterB) {
               comparison = masterA.title.localeCompare(masterB.title);
             }
           }
           break;
         case 'title':
-          const masterA = masterReleases.find(m => m.variants?.some(v => v.id === a.id));
-          const masterB = masterReleases.find(m => m.variants?.some(v => v.id === b.id));
+          const masterA = variantToMaster.get(a.id);
+          const masterB = variantToMaster.get(b.id);
           if (masterA && masterB) {
             comparison = masterA.title.localeCompare(masterB.title);
-            // Subsort by release year if titles are equal
             if (comparison === 0) {
               comparison = (parseInt(a.release_year) || 0) - (parseInt(b.release_year) || 0);
             }
@@ -1047,21 +1053,21 @@ export default function VHSCollectionTracker() {
     return sorted;
   };
 
-  const getCollectionItems = () => {
+  const collectionItems = useMemo(() => {
     return collection.map(item => {
       const master = masterReleases.find(m => m.id === item.master_id);
       const variant = master?.variants?.find(v => v.id === item.variant_id);
       return { master, variant };
     }).filter(item => item.master && item.variant);
-  };
+  }, [collection, masterReleases]);
 
-  const getWishlistItems = () => {
+  const wishlistItems = useMemo(() => {
     return wishlist.map(item => {
       const master = masterReleases.find(m => m.id === item.master_id);
       const variant = master?.variants?.find(v => v.id === item.variant_id);
       return { master, variant };
     }).filter(item => item.master && item.variant);
-  };
+  }, [wishlist, masterReleases]);
 
   const sortCollectionItems = (items) => {
     if (!items || items.length === 0) return [];
@@ -1308,32 +1314,13 @@ export default function VHSCollectionTracker() {
                             e.stopPropagation();
 
                             try {
-                              const response = await fetch(
-                                `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
-                              );
-                              const details = await response.json();
-
-                              let director = '';
-                              if (details.credits && details.credits.crew) {
-                                const directorObj = details.credits.crew.find(person => person.job === 'Director');
-                                director = directorObj ? directorObj.name : '';
-                              }
-
-                              let studio = '';
-                              if (details.production_companies && details.production_companies.length > 0) {
-                                studio = details.production_companies[0].name;
-                              }
-
-                              let genres = '';
-                              if (details.genres && details.genres.length > 0) {
-                                genres = details.genres.map(g => g.name).join(', ');
-                              }
+                              const { director, studio, genres } = await fetchTmdbMovieDetails(movie.id);
 
                               setNewSubmission({
                                 masterTitle: movie.title,
                                 year: movie.release_date ? movie.release_date.substring(0, 4) : '',
-                                director: director,
-                                studio: studio,
+                                director,
+                                studio,
                                 genre: genres,
                                 variantFormat: 'VHS',
                                 variantRegion: '',
@@ -2501,7 +2488,7 @@ export default function VHSCollectionTracker() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {sortCollectionItems(getCollectionItems()).map((item, idx) => (
+                {sortCollectionItems(collectionItems).map((item, idx) => (
                   <div key={idx} className="bg-white rounded-lg shadow p-6">
                     <div className="flex gap-4 items-start">
                       {/* Variant Images - Left Side */}
@@ -2613,7 +2600,7 @@ export default function VHSCollectionTracker() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {getWishlistItems().map((item, idx) => (
+                {wishlistItems.map((item, idx) => (
                   <div key={idx} className="bg-white rounded-lg shadow p-6">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
