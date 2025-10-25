@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
-import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, Loader } from 'lucide-react';
+import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, Loader, ChevronUp, ChevronDown } from 'lucide-react';
 
 const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -38,6 +38,8 @@ export default function VHSCollectionTracker() {
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [collectionToAdd, setCollectionToAdd] = useState({ masterId: null, variantId: null });
   const [collectionDetails, setCollectionDetails] = useState({ condition: '', notes: '' });
+  const [masterFieldsLocked, setMasterFieldsLocked] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Toast and loading states
   const [toast, setToast] = useState(null);
@@ -45,7 +47,10 @@ export default function VHSCollectionTracker() {
   const [tmdbSearching, setTmdbSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
-  const [sortVariantsBy, setSortVariantsBy] = useState('date'); // 'date', 'region', 'format'
+  const [sortVariantsBy, setSortVariantsBy] = useState('date'); // 'date', 'region', 'title'
+  const [sortVariantsDirection, setSortVariantsDirection] = useState('asc'); // 'asc' or 'desc'
+  const [sortCollectionBy, setSortCollectionBy] = useState('date'); // 'date', 'region', 'title'
+  const [sortCollectionDirection, setSortCollectionDirection] = useState('asc'); // 'asc' or 'desc'
 
   const [newSubmission, setNewSubmission] = useState({
     masterTitle: '',
@@ -112,6 +117,17 @@ export default function VHSCollectionTracker() {
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
+  };
+
+  const requireAuth = (action) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return false;
+    }
+    if (typeof action === 'function') {
+      action();
+    }
+    return true;
   };
 
   useEffect(() => {
@@ -194,7 +210,11 @@ export default function VHSCollectionTracker() {
   const loadUserCollection = async () => {
     const { data, error } = await supabase
       .from('user_collections')
-      .select('*')
+      .select(`
+        *,
+        master:master_releases(*),
+        variant:variants(*, variant_images(*))
+      `)
       .eq('user_id', user.id);
 
     if (!error) setCollection(data || []);
@@ -203,7 +223,11 @@ export default function VHSCollectionTracker() {
   const loadUserWishlist = async () => {
     const { data, error } = await supabase
       .from('user_wishlists')
-      .select('*')
+      .select(`
+        *,
+        master:master_releases(*),
+        variant:variants(*, variant_images(*))
+      `)
       .eq('user_id', user.id);
 
     if (!error) setWishlist(data || []);
@@ -314,51 +338,54 @@ export default function VHSCollectionTracker() {
     setTmdbSearchTimeout(timeout);
   };
 
+  const fetchTmdbMovieDetails = async (movieId) => {
+    const response = await fetch(
+      `https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+    );
+    const details = await response.json();
+
+    let director = '';
+    if (details.credits?.crew) {
+      const directorObj = details.credits.crew.find(person => person.job === 'Director');
+      director = directorObj?.name || '';
+    }
+
+    let studio = '';
+    if (details.production_companies?.length > 0) {
+      studio = details.production_companies[0].name;
+    }
+
+    let genres = '';
+    if (details.genres?.length > 0) {
+      genres = details.genres.map(g => g.name).join(', ');
+    }
+
+    return { details, director, studio, genres };
+  };
+
   const selectTmdbMovie = async (movie) => {
-    // Fetch full movie details including director, studio, and genres
     try {
-      const response = await fetch(
-        `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
-      );
-      const details = await response.json();
-
-      // Extract director from crew
-      let director = '';
-      if (details.credits && details.credits.crew) {
-        const directorObj = details.credits.crew.find(person => person.job === 'Director');
-        director = directorObj ? directorObj.name : '';
-      }
-
-      // Extract production studio (first production company)
-      let studio = '';
-      if (details.production_companies && details.production_companies.length > 0) {
-        studio = details.production_companies[0].name;
-      }
-
-      // Extract genres (comma-separated)
-      let genres = '';
-      if (details.genres && details.genres.length > 0) {
-        genres = details.genres.map(g => g.name).join(', ');
-      }
+      const { director, studio, genres } = await fetchTmdbMovieDetails(movie.id);
 
       setNewSubmission({
         ...newSubmission,
         masterTitle: movie.title,
         year: movie.release_date ? movie.release_date.substring(0, 4) : '',
-        director: director,
-        studio: studio,
+        director,
+        studio,
         genre: genres
       });
+      setMasterFieldsLocked(true);
       setShowTmdbDropdown(false);
       setTmdbSearchResults([]);
     } catch (error) {
       console.error('Error fetching TMDB details:', error);
-      // Fallback to basic info if detailed fetch fails
       setNewSubmission({
         ...newSubmission,
         masterTitle: movie.title,
         year: movie.release_date ? movie.release_date.substring(0, 4) : '',
       });
+      setMasterFieldsLocked(true);
       setShowTmdbDropdown(false);
       setTmdbSearchResults([]);
     }
@@ -390,20 +417,62 @@ export default function VHSCollectionTracker() {
   };
 
   const addToCollection = async (masterId, variantId, condition = null, notes = null) => {
-    const { error } = await supabase
-      .from('user_collections')
-      .insert([{
-        user_id: user.id,
-        master_id: masterId,
-        variant_id: variantId,
-        condition: condition,
-        notes: notes
-      }]);
+    // Check if item already exists in collection
+    const existingItem = collection.find(item => item.variant_id === variantId);
 
-    if (!error) {
-      loadUserCollection();
-      setShowCollectionModal(false);
-      setCollectionDetails({ condition: '', notes: '' });
+    console.log('addToCollection called:', { masterId, variantId, condition, notes, existingItem });
+
+    if (existingItem) {
+      // Update existing item
+      console.log('Updating existing collection item:', existingItem.id);
+      const { data, error } = await supabase
+        .from('user_collections')
+        .update({
+          condition: condition,
+          notes: notes
+        })
+        .eq('user_id', user.id)
+        .eq('variant_id', variantId)
+        .select();
+
+      console.log('Update result:', { data, error });
+
+      if (error) {
+        console.error('Error updating collection:', error);
+        showToast('Failed to update collection item!', 'error');
+      } else {
+        console.log('Update successful, reloading collection...');
+        await loadUserCollection();
+        setShowCollectionModal(false);
+        setCollectionDetails({ condition: '', notes: '' });
+        showToast('Collection item updated!');
+      }
+    } else {
+      // Insert new item
+      console.log('Inserting new collection item');
+      const { data, error } = await supabase
+        .from('user_collections')
+        .insert([{
+          user_id: user.id,
+          master_id: masterId,
+          variant_id: variantId,
+          condition: condition,
+          notes: notes
+        }])
+        .select();
+
+      console.log('Insert result:', { data, error });
+
+      if (error) {
+        console.error('Error adding to collection:', error);
+        showToast('Failed to add to collection!', 'error');
+      } else {
+        console.log('Insert successful, reloading collection...');
+        await loadUserCollection();
+        setShowCollectionModal(false);
+        setCollectionDetails({ condition: '', notes: '' });
+        showToast('Added to collection!');
+      }
     }
   };
 
@@ -812,6 +881,12 @@ export default function VHSCollectionTracker() {
 
   const handleSubmitEntry = async () => {
     try {
+      // Validate TMDB selection for new master submissions
+      if (submitType === 'master' && !editingMaster && !masterFieldsLocked) {
+        showToast('You must select a movie from TMDB before submitting!', 'error');
+        return;
+      }
+
       // Validate required fields for variants
       if (!editingMaster) {
         if (!newSubmission.variantRegion) {
@@ -974,6 +1049,7 @@ export default function VHSCollectionTracker() {
       }
 
       setShowSubmitModal(false);
+      setMasterFieldsLocked(false);
       setNewSubmission({
         masterTitle: '', year: '', director: '', studio: '', genre: '',
         variantFormat: 'VHS', variantRegion: '', variantRelease: '',
@@ -995,32 +1071,118 @@ export default function VHSCollectionTracker() {
   const sortVariants = (variants) => {
     if (!variants) return [];
     const sorted = [...variants];
-    switch (sortVariantsBy) {
-      case 'date':
-        return sorted.sort((a, b) => parseInt(a.release_year) - parseInt(b.release_year));
-      case 'region':
-        return sorted.sort((a, b) => a.region.localeCompare(b.region));
-      case 'format':
-        return sorted.sort((a, b) => a.format.localeCompare(b.format));
-      default:
-        return sorted;
-    }
+    const direction = sortVariantsDirection === 'asc' ? 1 : -1;
+
+    // Build lookup map once: variant ID -> master (O(n) instead of O(n*m))
+    const variantToMaster = new Map();
+    masterReleases.forEach(master => {
+      master.variants?.forEach(variant => {
+        variantToMaster.set(variant.id, master);
+      });
+    });
+
+    sorted.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortVariantsBy) {
+        case 'date':
+          comparison = (parseInt(a.release_year) || 0) - (parseInt(b.release_year) || 0);
+          if (comparison === 0) {
+            const masterA = variantToMaster.get(a.id);
+            const masterB = variantToMaster.get(b.id);
+            if (masterA && masterB) {
+              comparison = masterA.title.localeCompare(masterB.title);
+            }
+          }
+          break;
+        case 'region':
+          comparison = (a.region || '').localeCompare(b.region || '');
+          if (comparison === 0) {
+            const masterA = variantToMaster.get(a.id);
+            const masterB = variantToMaster.get(b.id);
+            if (masterA && masterB) {
+              comparison = masterA.title.localeCompare(masterB.title);
+            }
+          }
+          break;
+        case 'title':
+          const masterA = variantToMaster.get(a.id);
+          const masterB = variantToMaster.get(b.id);
+          if (masterA && masterB) {
+            comparison = masterA.title.localeCompare(masterB.title);
+            if (comparison === 0) {
+              comparison = (parseInt(a.release_year) || 0) - (parseInt(b.release_year) || 0);
+            }
+          }
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return comparison * direction;
+    });
+
+    return sorted;
   };
 
-  const getCollectionItems = () => {
-    return collection.map(item => {
-      const master = masterReleases.find(m => m.id === item.master_id);
-      const variant = master?.variants?.find(v => v.id === item.variant_id);
-      return { master, variant };
-    }).filter(item => item.master && item.variant);
-  };
+  const collectionItems = useMemo(() => {
+    return collection
+      .filter(item => item.master && item.variant)
+      .map(item => ({
+        master: item.master,
+        variant: item.variant
+      }));
+  }, [collection]);
 
-  const getWishlistItems = () => {
-    return wishlist.map(item => {
-      const master = masterReleases.find(m => m.id === item.master_id);
-      const variant = master?.variants?.find(v => v.id === item.variant_id);
-      return { master, variant };
-    }).filter(item => item.master && item.variant);
+  const wishlistItems = useMemo(() => {
+    return wishlist
+      .filter(item => item.master && item.variant)
+      .map(item => ({
+        master: item.master,
+        variant: item.variant
+      }));
+  }, [wishlist]);
+
+  const sortCollectionItems = (items) => {
+    if (!items || items.length === 0) return [];
+    const sorted = [...items];
+    const direction = sortCollectionDirection === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortCollectionBy) {
+        case 'date':
+          comparison = (parseInt(a.variant?.release_year) || 0) - (parseInt(b.variant?.release_year) || 0);
+          // Subsort by title if dates are equal
+          if (comparison === 0 && a.master && b.master) {
+            comparison = a.master.title.localeCompare(b.master.title);
+          }
+          break;
+        case 'region':
+          comparison = (a.variant?.region || '').localeCompare(b.variant?.region || '');
+          // Subsort by title if regions are equal
+          if (comparison === 0 && a.master && b.master) {
+            comparison = a.master.title.localeCompare(b.master.title);
+          }
+          break;
+        case 'title':
+          if (a.master && b.master) {
+            comparison = a.master.title.localeCompare(b.master.title);
+            // Subsort by release year if titles are equal
+            if (comparison === 0) {
+              comparison = (parseInt(a.variant?.release_year) || 0) - (parseInt(b.variant?.release_year) || 0);
+            }
+          }
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return comparison * direction;
+    });
+
+    return sorted;
   };
 
   if (loading) {
@@ -1031,57 +1193,6 @@ export default function VHSCollectionTracker() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-orange-500">
-          <div className="flex flex-col items-center justify-center mb-8">
-            <div className="relative mb-4">
-              <Film className="w-16 h-16 text-orange-400 drop-shadow-2xl" />
-              <div className="absolute -inset-2 bg-orange-400 rounded-full opacity-20 blur-lg"></div>
-            </div>
-            <h1 className="text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-500 via-yellow-400 to-orange-500 mb-2">
-              VHS VAULT
-            </h1>
-            <p className="text-sm text-gray-600 font-mono tracking-wider">REWIND • PLAY • COLLECT</p>
-          </div>
-          <p className="text-gray-700 text-center mb-6 font-semibold">
-            {isSignUp ? 'Create your account' : 'Sign in to your account'}
-          </p>
-          <div>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleAuth(e)}
-              placeholder="Password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-            <button
-              onClick={handleAuth}
-              disabled={loading}
-              className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
-            >
-              {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
-            </button>
-            <button
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="w-full mt-4 text-purple-600 hover:text-purple-700 font-medium"
-            >
-              {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -1115,22 +1226,34 @@ export default function VHSCollectionTracker() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="hidden md:flex items-center space-x-2 bg-purple-800/50 backdrop-blur-sm px-5 py-2.5 rounded-lg border border-purple-500/30">
-                <User className="w-5 h-5 text-orange-300" />
-                <span className="text-sm font-medium">{user.email}</span>
-                {isAdmin && (
-                  <span className="ml-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-purple-900 px-3 py-1 rounded-full text-xs font-black shadow-lg">
-                    ADMIN
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={handleLogout}
-                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 px-5 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2 font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5"
-              >
-                <LogOut className="w-5 h-5" />
-                <span>Logout</span>
-              </button>
+              {user ? (
+                <>
+                  <div className="hidden md:flex items-center space-x-2 bg-purple-800/50 backdrop-blur-sm px-5 py-2.5 rounded-lg border border-purple-500/30">
+                    <User className="w-5 h-5 text-orange-300" />
+                    <span className="text-sm font-medium">{user.email}</span>
+                    {isAdmin && (
+                      <span className="ml-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-purple-900 px-3 py-1 rounded-full text-xs font-black shadow-lg">
+                        ADMIN
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 px-5 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2 font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span>Logout</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 px-5 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2 font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                >
+                  <User className="w-5 h-5" />
+                  <span>Login / Sign Up</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1139,9 +1262,11 @@ export default function VHSCollectionTracker() {
       <div className="sticky top-[89px] z-30 bg-white shadow-lg border-b-2 border-gray-200">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex space-x-2 md:space-x-8 overflow-x-auto">
-            {(isAdmin
-              ? ['search', 'browse', 'collection', 'wishlist', 'marketplace', 'pending']
-              : ['search', 'collection', 'wishlist', 'pending']
+            {(!user
+              ? ['search', 'browse']
+              : isAdmin
+                ? ['search', 'browse', 'collection', 'wishlist', 'marketplace', 'pending']
+                : ['search', 'collection', 'wishlist', 'pending']
             ).map(tab => (
               <button
                 key={tab}
@@ -1172,7 +1297,7 @@ export default function VHSCollectionTracker() {
               {/* Local Database Search */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Search Your Collection
+                  Search Our Collection
                 </label>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
@@ -1226,32 +1351,13 @@ export default function VHSCollectionTracker() {
                             e.stopPropagation();
 
                             try {
-                              const response = await fetch(
-                                `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
-                              );
-                              const details = await response.json();
-
-                              let director = '';
-                              if (details.credits && details.credits.crew) {
-                                const directorObj = details.credits.crew.find(person => person.job === 'Director');
-                                director = directorObj ? directorObj.name : '';
-                              }
-
-                              let studio = '';
-                              if (details.production_companies && details.production_companies.length > 0) {
-                                studio = details.production_companies[0].name;
-                              }
-
-                              let genres = '';
-                              if (details.genres && details.genres.length > 0) {
-                                genres = details.genres.map(g => g.name).join(', ');
-                              }
+                              const { director, studio, genres } = await fetchTmdbMovieDetails(movie.id);
 
                               setNewSubmission({
                                 masterTitle: movie.title,
                                 year: movie.release_date ? movie.release_date.substring(0, 4) : '',
-                                director: director,
-                                studio: studio,
+                                director,
+                                studio,
                                 genre: genres,
                                 variantFormat: 'VHS',
                                 variantRegion: '',
@@ -1442,13 +1548,13 @@ export default function VHSCollectionTracker() {
                       {/* Action Buttons */}
                       <div className="flex gap-3 border-t pt-4">
                         <button
-                          onClick={() => {
+                          onClick={() => requireAuth(() => {
                             if (isInCollection(selectedVariant.id)) {
                               removeFromCollection(selectedVariant.id);
                             } else {
                               showAddToCollectionModal(selectedMaster?.id, selectedVariant.id);
                             }
-                          }}
+                          })}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                             isInCollection(selectedVariant.id)
                               ? 'bg-red-500 text-white hover:bg-red-600'
@@ -1462,7 +1568,7 @@ export default function VHSCollectionTracker() {
                           )}
                         </button>
                         <button
-                          onClick={() => toggleWishlist(selectedMaster?.id, selectedVariant.id)}
+                          onClick={() => requireAuth(() => toggleWishlist(selectedMaster?.id, selectedVariant.id))}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                             isInWishlist(selectedVariant.id)
                               ? 'bg-pink-500 text-white hover:bg-pink-600'
@@ -1486,35 +1592,38 @@ export default function VHSCollectionTracker() {
                       {filteredMasters.map(master => (
                         <div
                           key={master.id}
-                          className="bg-white rounded-lg shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 cursor-pointer border border-gray-100"
+                          className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 cursor-pointer border-2 border-transparent hover:border-purple-200 group"
                           onClick={async () => {
                             const variants = await loadVariantsForMaster(master.id);
                             setSelectedMaster({ ...master, variants });
                           }}
                         >
-                          <div className="flex gap-4 items-start">
+                          <div className="flex gap-5 items-start">
                             {master.poster_url ? (
                               <img loading="lazy"
                                 src={master.poster_url}
                                 alt={`${master.title} poster`}
-                                className="w-24 h-36 object-cover rounded shadow-md flex-shrink-0"
+                                className="w-24 h-36 object-cover rounded-lg shadow-lg flex-shrink-0 group-hover:-rotate-2 group-hover:scale-105 transition-all duration-300"
                               />
                             ) : (
-                              <div className="w-24 h-36 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                              <div className="w-24 h-36 bg-gradient-to-br from-purple-100 via-purple-200 to-pink-100 rounded-lg shadow-lg flex items-center justify-center flex-shrink-0 group-hover:-rotate-2 group-hover:scale-105 transition-all duration-300">
                                 <Film className="w-12 h-12 text-purple-400" />
                               </div>
                             )}
                             <div className="flex-1">
-                              <h2 className="text-xl font-bold text-gray-800 mb-1">{master.title}</h2>
-                              <p className="text-gray-600">{master.director} • {master.year} • {master.genre}</p>
-                              <p className="text-sm text-gray-500 mt-1">{master.studio}</p>
-                              <div className="flex items-center space-x-4 mt-3">
-                                <div className="flex items-center space-x-1">
+                              <h2 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-purple-700 transition-colors">{master.title}</h2>
+                              <p className="text-gray-600 font-medium mb-1">{master.director} • {master.year}</p>
+                              <p className="text-sm text-purple-600 font-medium mb-1">{master.genre}</p>
+                              <p className="text-xs text-gray-500 mb-3">{master.studio}</p>
+                              <div className="flex items-center gap-4 mt-3">
+                                <div className="flex items-center gap-1 bg-gradient-to-r from-yellow-50 to-orange-50 px-3 py-1 rounded-full">
                                   <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                                  <span className="font-medium">{master.avg_rating || 0}</span>
-                                  <span className="text-gray-500 text-sm">({master.total_ratings || 0})</span>
+                                  <span className="font-bold text-gray-800">{master.avg_rating || 0}</span>
+                                  <span className="text-gray-500 text-xs">({master.total_ratings || 0})</span>
                                 </div>
-                                <p className="text-sm text-purple-600">{master.variant_count || 0} variant(s)</p>
+                                <div className="bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
+                                  {master.variant_count || 0} variant{master.variant_count !== 1 ? 's' : ''}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1649,12 +1758,19 @@ export default function VHSCollectionTracker() {
                       >
                         <option value="date">Release Date</option>
                         <option value="region">Region</option>
-                        <option value="format">Format</option>
+                        <option value="title">Title</option>
                       </select>
+                      <button
+                        onClick={() => setSortVariantsDirection(sortVariantsDirection === 'asc' ? 'desc' : 'asc')}
+                        className="p-1 hover:bg-gray-100 rounded transition"
+                        title={sortVariantsDirection === 'asc' ? 'Ascending' : 'Descending'}
+                      >
+                        {sortVariantsDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
                   <button
-                    onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
+                    onClick={() => requireAuth(() => { setShowSubmitModal(true); setSubmitType('variant'); })}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition flex items-center space-x-2"
                   >
                     <Plus className="w-4 h-4" />
@@ -1689,15 +1805,15 @@ export default function VHSCollectionTracker() {
                     const inColl = isInCollection(variant.id);
                     const inWish = isInWishlist(variant.id);
                     return (
-                      <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border border-gray-100">
-                        <div className="flex gap-4 items-start">
+                      <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border-2 border-transparent hover:border-purple-200 group">
+                        <div className="flex gap-6 items-start">
                           {/* Variant Images - Left Side */}
                           {variant.variant_images && variant.variant_images.length > 0 ? (
                             <div className="flex-shrink-0">
                               <img loading="lazy"
                                 src={variant.variant_images[0].image_url}
                                 alt="Variant cover"
-                                className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
+                                className="w-32 h-48 object-cover rounded-lg shadow-lg cursor-pointer hover:shadow-2xl hover:-rotate-2 hover:scale-105 transition-all duration-300"
                                 onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), 0)}
                               />
                               {variant.variant_images.length > 1 && (
@@ -1707,12 +1823,12 @@ export default function VHSCollectionTracker() {
                                       key={idx}
                                       src={img.image_url}
                                       alt={`Variant ${idx + 2}`}
-                                      className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                      className="w-10 h-10 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 hover:scale-110 transition-all duration-200"
                                       onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), idx + 1)}
                                     />
                                   ))}
                                   {variant.variant_images.length > 4 && (
-                                    <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded border-2 border-purple-300 flex items-center justify-center text-purple-700 text-xs font-bold">
                                       +{variant.variant_images.length - 4}
                                     </div>
                                   )}
@@ -1720,21 +1836,21 @@ export default function VHSCollectionTracker() {
                               )}
                             </div>
                           ) : (
-                            <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                            <div className="w-32 h-48 bg-gradient-to-br from-purple-100 via-purple-200 to-pink-100 rounded-lg shadow-lg flex items-center justify-center flex-shrink-0 cursor-pointer hover:scale-105 hover:-rotate-2 transition-all duration-300">
                               <Film className="w-16 h-16 text-purple-400" />
                             </div>
                           )}
 
                           {/* Variant Info - Center */}
                           <div
-                            className="flex-1 cursor-pointer hover:bg-gray-50 rounded p-2 -m-2 transition"
+                            className="flex-1 cursor-pointer hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent rounded-lg p-3 -m-3 transition-all duration-200"
                             onClick={() => setSelectedVariant(variant)}
                           >
-                            <div className="flex items-center space-x-2 mb-2">
-                              <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                            <div className="flex items-center space-x-2 mb-3">
+                              <span className="bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                 {variant.format}
                               </span>
-                              <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                              <span className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                 {variant.region}
                               </span>
                               <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm flex items-center space-x-1">
@@ -1864,7 +1980,7 @@ export default function VHSCollectionTracker() {
                 />
               </div>
               <button
-                onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
+                onClick={() => requireAuth(() => { setShowSubmitModal(true); setSubmitType('master'); })}
                 className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
               >
                 <Plus className="w-5 h-5" />
@@ -2011,13 +2127,13 @@ export default function VHSCollectionTracker() {
                       {/* Action Buttons */}
                       <div className="flex gap-3 border-t pt-4">
                         <button
-                          onClick={() => {
+                          onClick={() => requireAuth(() => {
                             if (isInCollection(selectedVariant.id)) {
                               removeFromCollection(selectedVariant.id);
                             } else {
                               showAddToCollectionModal(selectedMaster?.id, selectedVariant.id);
                             }
-                          }}
+                          })}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                             isInCollection(selectedVariant.id)
                               ? 'bg-red-500 text-white hover:bg-red-600'
@@ -2031,7 +2147,7 @@ export default function VHSCollectionTracker() {
                           )}
                         </button>
                         <button
-                          onClick={() => toggleWishlist(selectedMaster?.id, selectedVariant.id)}
+                          onClick={() => requireAuth(() => toggleWishlist(selectedMaster?.id, selectedVariant.id))}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                             isInWishlist(selectedVariant.id)
                               ? 'bg-pink-500 text-white hover:bg-pink-600'
@@ -2191,8 +2307,15 @@ export default function VHSCollectionTracker() {
                         >
                           <option value="date">Release Date</option>
                           <option value="region">Region</option>
-                          <option value="format">Format</option>
+                          <option value="title">Title</option>
                         </select>
+                        <button
+                          onClick={() => setSortVariantsDirection(sortVariantsDirection === 'asc' ? 'desc' : 'asc')}
+                          className="p-1 hover:bg-gray-100 rounded transition"
+                          title={sortVariantsDirection === 'asc' ? 'Ascending' : 'Descending'}
+                        >
+                          {sortVariantsDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
                       </div>
                     </div>
                     <button
@@ -2209,15 +2332,15 @@ export default function VHSCollectionTracker() {
                       const inColl = isInCollection(variant.id);
                       const inWish = isInWishlist(variant.id);
                       return (
-                        <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border border-gray-100">
-                          <div className="flex gap-4 items-start">
+                        <div key={variant.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 p-6 border-2 border-transparent hover:border-purple-200 group">
+                          <div className="flex gap-6 items-start">
                             {/* Variant Images - Left Side */}
                             {variant.variant_images && variant.variant_images.length > 0 ? (
                               <div className="flex-shrink-0">
                                 <img loading="lazy"
                                   src={variant.variant_images[0].image_url}
                                   alt="Variant cover"
-                                  className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
+                                  className="w-32 h-48 object-cover rounded-lg shadow-lg cursor-pointer hover:shadow-2xl hover:-rotate-2 hover:scale-105 transition-all duration-300"
                                   onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), 0)}
                                 />
                                 {variant.variant_images.length > 1 && (
@@ -2227,12 +2350,12 @@ export default function VHSCollectionTracker() {
                                         key={idx}
                                         src={img.image_url}
                                         alt={`Variant ${idx + 2}`}
-                                        className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                        className="w-10 h-10 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 hover:scale-110 transition-all duration-200"
                                         onClick={() => openImageGallery(variant.variant_images.map(img => img.image_url), idx + 1)}
                                       />
                                     ))}
                                     {variant.variant_images.length > 4 && (
-                                      <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                      <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded border-2 border-purple-300 flex items-center justify-center text-purple-700 text-xs font-bold">
                                         +{variant.variant_images.length - 4}
                                       </div>
                                     )}
@@ -2240,21 +2363,21 @@ export default function VHSCollectionTracker() {
                                 )}
                               </div>
                             ) : (
-                              <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                              <div className="w-32 h-48 bg-gradient-to-br from-purple-100 via-purple-200 to-pink-100 rounded-lg shadow-lg flex items-center justify-center flex-shrink-0 cursor-pointer hover:scale-105 hover:-rotate-2 transition-all duration-300">
                                 <Film className="w-16 h-16 text-purple-400" />
                               </div>
                             )}
 
                             {/* Variant Info - Center */}
                             <div
-                              className="flex-1 cursor-pointer hover:bg-gray-50 rounded p-2 -m-2 transition"
+                              className="flex-1 cursor-pointer hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent rounded-lg p-3 -m-3 transition-all duration-200"
                               onClick={() => setSelectedVariant(variant)}
                             >
-                              <div className="flex items-center space-x-2 mb-2">
-                                <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                              <div className="flex items-center space-x-2 mb-3">
+                                <span className="bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                   {variant.format}
                                 </span>
-                                <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                                <span className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                   {variant.region}
                                 </span>
                                 <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm flex items-center space-x-1">
@@ -2282,13 +2405,13 @@ export default function VHSCollectionTracker() {
                             {/* Action Buttons - Right Side */}
                             <div className="flex flex-col space-y-2 flex-shrink-0">
                               <button
-                                onClick={() => {
+                                onClick={() => requireAuth(() => {
                                   if (inColl) {
                                     removeFromCollection(variant.id);
                                   } else {
                                     addToCollection(selectedMaster.id, variant.id);
                                   }
-                                }}
+                                })}
                                 className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-2 ${
                                   inColl
                                     ? 'bg-red-500 text-white hover:bg-red-600'
@@ -2298,7 +2421,7 @@ export default function VHSCollectionTracker() {
                                 {inColl ? <><X className="w-4 h-4" /><span>Remove</span></> : <><Plus className="w-4 h-4" /><span>Add</span></>}
                               </button>
                               <button
-                                onClick={() => toggleWishlist(selectedMaster.id, variant.id)}
+                                onClick={() => requireAuth(() => toggleWishlist(selectedMaster.id, variant.id))}
                                 className={`px-4 py-2 rounded-lg font-medium transition flex items-center justify-center ${
                                   inWish
                                     ? 'bg-pink-500 text-white hover:bg-pink-600'
@@ -2364,35 +2487,278 @@ export default function VHSCollectionTracker() {
 
         {view === 'collection' && (
           <>
-            <h2 className="text-4xl font-bold text-gray-900 mb-8">My Collection</h2>
-            {collection.length === 0 ? (
-              <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
-                <div className="relative inline-block mb-6">
-                  <Film className="w-24 h-24 text-purple-400 mx-auto" />
-                  <div className="absolute inset-0 bg-purple-400 rounded-full opacity-20 blur-xl"></div>
+            {selectedVariant ? (
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <button
+                    onClick={() => {
+                      setSelectedVariant(null);
+                      setSelectedMaster(null);
+                    }}
+                    className="text-purple-600 hover:text-purple-700 font-medium"
+                  >
+                    ← Back to collection
+                  </button>
                 </div>
-                <h3 className="text-3xl font-bold text-gray-800 mb-3">Your Vault is Empty!</h3>
-                <p className="text-gray-600 text-lg mb-6">Time to start building your VHS empire</p>
-                <button
-                  onClick={() => setView('search')}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
-                >
-                  Browse Tapes
-                </button>
+
+                {/* Variant Detail Card */}
+                <div className="bg-white rounded-xl shadow-2xl p-8 mb-8 border border-gray-100">
+                  <div className="flex gap-6">
+                    {/* Variant Images Gallery */}
+                    {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
+                      <div className="flex-shrink-0">
+                        <img loading="lazy"
+                          src={selectedVariant.variant_images[0].image_url}
+                          alt="Variant cover"
+                          className="w-48 h-72 object-cover rounded-lg shadow-xl cursor-pointer hover:shadow-2xl hover:-translate-y-2 hover:rotate-2 transition-all duration-300 border-4 border-gray-800"
+                          onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), 0)}
+                        />
+                        {selectedVariant.variant_images.length > 1 && (
+                          <div className="grid grid-cols-3 gap-2 mt-3">
+                            {selectedVariant.variant_images.slice(1, 4).map((img, idx) => (
+                              <img loading="lazy"
+                                key={idx}
+                                src={img.image_url}
+                                alt={`Image ${idx + 2}`}
+                                className="w-full h-20 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), idx + 1)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-48 h-72 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-lg flex items-center justify-center flex-shrink-0">
+                        <Film className="w-24 h-24 text-purple-400" />
+                      </div>
+                    )}
+
+                    {/* Variant Details */}
+                    <div className="flex-1">
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                        {selectedMaster?.title || 'Unknown Title'}
+                      </h2>
+                      <p className="text-gray-600 mb-4">
+                        {selectedMaster?.director} • {selectedMaster?.year} • {selectedMaster?.genre}
+                      </p>
+
+                      <div className="border-t pt-4 mb-4">
+                        <h3 className="text-lg font-bold text-gray-700 mb-3">Variant Details</h3>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Format</p>
+                            <p className="text-gray-600">{selectedVariant.format}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Region</p>
+                            <p className="text-gray-600">{selectedVariant.region}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Release Year</p>
+                            <p className="text-gray-600">{selectedVariant.release_year}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Case Type</p>
+                            <p className="text-gray-600">{selectedVariant.case_type}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Barcode</p>
+                            <p className="text-gray-600">{selectedVariant.barcode || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Status</p>
+                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm inline-flex items-center space-x-1">
+                              <Check className="w-3 h-3" />
+                              <span>Verified</span>
+                            </span>
+                          </div>
+                          {selectedVariant.notes && (
+                            <div className="md:col-span-2">
+                              <p className="text-sm font-semibold text-gray-700">Variant Notes</p>
+                              <p className="text-gray-600 italic">{selectedVariant.notes}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Collection-specific details */}
+                        {collection.find(c => c.variant_id === selectedVariant.id) && (
+                          <div className="mt-4 pt-4 border-t bg-gradient-to-r from-purple-50 to-transparent p-4 rounded">
+                            <h4 className="text-md font-bold text-gray-700 mb-3">My Collection Details</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {collection.find(c => c.variant_id === selectedVariant.id)?.condition && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Condition</p>
+                                  <span className="bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm inline-block">
+                                    {collection.find(c => c.variant_id === selectedVariant.id).condition}
+                                  </span>
+                                </div>
+                              )}
+                              {collection.find(c => c.variant_id === selectedVariant.id)?.notes && (
+                                <div className="md:col-span-2">
+                                  <p className="text-sm font-semibold text-gray-700 mb-1">My Notes</p>
+                                  <p className="text-gray-600 italic bg-white bg-opacity-50 rounded p-2 border-l-4 border-purple-300">
+                                    {collection.find(c => c.variant_id === selectedVariant.id).notes}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Advanced Fields - Only shown if filled out */}
+                        {(selectedVariant.edition_type || selectedVariant.audio_language || selectedVariant.subtitles !== null || selectedVariant.original_rating || selectedVariant.aspect_ratio || selectedVariant.shell_color) && (
+                          <div className="mt-4 pt-4 border-t">
+                            <h4 className="text-md font-bold text-gray-700 mb-3">Advanced Attributes</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {selectedVariant.edition_type && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Edition Type</p>
+                                  <p className="text-gray-600">{selectedVariant.edition_type}</p>
+                                </div>
+                              )}
+                              {selectedVariant.audio_language && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Audio Language</p>
+                                  <p className="text-gray-600">{selectedVariant.audio_language}</p>
+                                </div>
+                              )}
+                              {selectedVariant.subtitles !== null && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Subtitles</p>
+                                  <p className="text-gray-600">{selectedVariant.subtitles ? 'Yes' : 'No'}</p>
+                                </div>
+                              )}
+                              {selectedVariant.original_rating && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Original Rating</p>
+                                  <p className="text-gray-600">{selectedVariant.original_rating}</p>
+                                </div>
+                              )}
+                              {selectedVariant.aspect_ratio && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Aspect Ratio</p>
+                                  <p className="text-gray-600">{selectedVariant.aspect_ratio}</p>
+                                </div>
+                              )}
+                              {selectedVariant.shell_color && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Shell Color</p>
+                                  <p className="text-gray-600">{selectedVariant.shell_color}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 border-t pt-4">
+                        <button
+                          onClick={() => {
+                            const collectionItem = collection.find(c => c.variant_id === selectedVariant.id);
+                            setCollectionDetails({
+                              condition: collectionItem?.condition || '',
+                              notes: collectionItem?.notes || ''
+                            });
+                            setCollectionToAdd({ masterId: selectedMaster?.id, variantId: selectedVariant.id });
+                            setShowCollectionModal(true);
+                          }}
+                          className="px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700"
+                        >
+                          <Edit className="w-5 h-5" />
+                          <span>Edit Details</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            removeFromCollection(selectedVariant.id);
+                            setSelectedVariant(null);
+                            setSelectedMaster(null);
+                          }}
+                          className="px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 bg-red-500 text-white hover:bg-red-600"
+                        >
+                          <X className="w-5 h-5" />
+                          <span>Remove from Collection</span>
+                        </button>
+                        <button
+                          onClick={() => requireAuth(() => toggleWishlist(selectedMaster?.id, selectedVariant.id))}
+                          className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
+                            isInWishlist(selectedVariant.id)
+                              ? 'bg-pink-500 text-white hover:bg-pink-600'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          <Heart className={`w-5 h-5 ${isInWishlist(selectedVariant.id) ? 'fill-current' : ''}`} />
+                          <span>{isInWishlist(selectedVariant.id) ? 'In Wishlist' : 'Add to Wishlist'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="grid gap-4">
-                {getCollectionItems().map((item, idx) => (
-                  <div key={idx} className="bg-white rounded-lg shadow p-6">
-                    <div className="flex gap-4 items-start">
+              <>
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-4xl font-bold text-gray-900">My Collection</h2>
+                  {collection.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">Sort by:</span>
+                      <select
+                        value={sortCollectionBy}
+                        onChange={(e) => setSortCollectionBy(e.target.value)}
+                        className="text-sm border border-gray-300 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="date">Release Date</option>
+                        <option value="region">Region</option>
+                        <option value="title">Title</option>
+                      </select>
+                      <button
+                        onClick={() => setSortCollectionDirection(sortCollectionDirection === 'asc' ? 'desc' : 'asc')}
+                        className="p-1 hover:bg-gray-100 rounded transition"
+                        title={sortCollectionDirection === 'asc' ? 'Ascending' : 'Descending'}
+                      >
+                        {sortCollectionDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {collection.length === 0 ? (
+                  <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
+                    <div className="relative inline-block mb-6">
+                      <Film className="w-24 h-24 text-purple-400 mx-auto" />
+                      <div className="absolute inset-0 bg-purple-400 rounded-full opacity-20 blur-xl"></div>
+                    </div>
+                    <h3 className="text-3xl font-bold text-gray-800 mb-3">Your Vault is Empty!</h3>
+                    <p className="text-gray-600 text-lg mb-6">Time to start building your VHS empire</p>
+                    <button
+                      onClick={() => setView('search')}
+                      className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                    >
+                      Browse Tapes
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                {sortCollectionItems(collectionItems).map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 border-2 border-transparent hover:border-purple-200 cursor-pointer group"
+                    onClick={() => {
+                      setSelectedMaster(item.master);
+                      setSelectedVariant(item.variant);
+                    }}
+                  >
+                    <div className="flex gap-6 items-start">
                       {/* Variant Images - Left Side */}
                       {item.variant.variant_images && item.variant.variant_images.length > 0 ? (
                         <div className="flex-shrink-0">
                           <img loading="lazy"
                             src={item.variant.variant_images[0].image_url}
                             alt="Variant cover"
-                            className="w-32 h-48 object-cover rounded shadow-md cursor-pointer hover:shadow-lg transition"
-                            onClick={() => openImageGallery(item.variant.variant_images.map(img => img.image_url), 0)}
+                            className="w-32 h-48 object-cover rounded-lg shadow-lg hover:shadow-2xl group-hover:-rotate-2 group-hover:scale-105 transition-all duration-300"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openImageGallery(item.variant.variant_images.map(img => img.image_url), 0);
+                            }}
                           />
                           {item.variant.variant_images.length > 1 && (
                             <div className="flex mt-2 space-x-1">
@@ -2401,12 +2767,15 @@ export default function VHSCollectionTracker() {
                                   key={imgIdx}
                                   src={img.image_url}
                                   alt={`Variant ${imgIdx + 2}`}
-                                  className="w-10 h-10 object-cover rounded border border-gray-300 cursor-pointer hover:border-purple-500 transition"
-                                  onClick={() => openImageGallery(item.variant.variant_images.map(img => img.image_url), imgIdx + 1)}
+                                  className="w-10 h-10 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 hover:scale-110 transition-all duration-200"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openImageGallery(item.variant.variant_images.map(img => img.image_url), imgIdx + 1);
+                                  }}
                                 />
                               ))}
                               {item.variant.variant_images.length > 4 && (
-                                <div className="w-10 h-10 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                                <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded border-2 border-purple-300 flex items-center justify-center text-purple-700 text-xs font-bold">
                                   +{item.variant.variant_images.length - 4}
                                 </div>
                               )}
@@ -2414,42 +2783,52 @@ export default function VHSCollectionTracker() {
                           )}
                         </div>
                       ) : (
-                        <div className="w-32 h-48 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-md flex items-center justify-center flex-shrink-0">
+                        <div className="w-32 h-48 bg-gradient-to-br from-purple-100 via-purple-200 to-pink-100 rounded-lg shadow-lg flex items-center justify-center flex-shrink-0 group-hover:scale-105 group-hover:-rotate-2 transition-all duration-300">
                           <Film className="w-16 h-16 text-purple-400" />
                         </div>
                       )}
 
                       {/* Variant Info - Center */}
                       <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-800 mb-2">{item.master.title}</h3>
-                        <p className="text-gray-600 mb-3">{item.master.director} • {item.master.year}</p>
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                        <h3 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-purple-700 transition-colors">{item.master.title}</h3>
+                        <p className="text-gray-600 mb-3 flex items-center gap-2">
+                          <span className="font-medium">{item.master.director}</span>
+                          <span className="text-gray-400">•</span>
+                          <span>{item.master.year}</span>
+                        </p>
+                        <div className="flex items-center flex-wrap gap-2 mb-3">
+                          <span className="bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                             {item.variant.format}
                           </span>
-                          <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                          <span className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                             {item.variant.region}
                           </span>
+                          <span className="text-gray-600 text-sm">
+                            {item.variant.release_year}
+                          </span>
+                          {item.variant.case_type && (
+                            <>
+                              <span className="text-gray-400">•</span>
+                              <span className="text-gray-600 text-sm">{item.variant.case_type}</span>
+                            </>
+                          )}
                         </div>
-                        <p className="text-gray-700 text-sm mb-3">
-                          {item.variant.release_year} • {item.variant.case_type}
-                        </p>
 
                         {/* Personal Collection Details */}
                         {(collection.find(c => c.variant_id === item.variant.id)?.condition || collection.find(c => c.variant_id === item.variant.id)?.notes) && (
-                          <div className="border-t pt-3 mt-3">
+                          <div className="border-t-2 border-purple-100 pt-3 mt-3 bg-gradient-to-r from-purple-50 to-transparent -mx-3 px-3 py-2 rounded">
                             {collection.find(c => c.variant_id === item.variant.id)?.condition && (
-                              <div className="mb-2">
-                                <span className="text-sm font-semibold text-gray-700">Condition: </span>
-                                <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-sm">
+                              <div className="mb-2 flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-700">Condition:</span>
+                                <span className="bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
                                   {collection.find(c => c.variant_id === item.variant.id).condition}
                                 </span>
                               </div>
                             )}
                             {collection.find(c => c.variant_id === item.variant.id)?.notes && (
                               <div>
-                                <p className="text-sm font-semibold text-gray-700">My Notes:</p>
-                                <p className="text-sm text-gray-600 italic mt-1">
+                                <p className="text-sm font-semibold text-gray-700 mb-1">My Notes:</p>
+                                <p className="text-sm text-gray-600 italic bg-white bg-opacity-50 rounded p-2 border-l-4 border-purple-300">
                                   {collection.find(c => c.variant_id === item.variant.id).notes}
                                 </p>
                               </div>
@@ -2458,18 +2837,42 @@ export default function VHSCollectionTracker() {
                         )}
                       </div>
 
-                      {/* Remove Button - Right Side */}
-                      <button
-                        onClick={() => removeFromCollection(item.variant.id)}
-                        className="flex-shrink-0 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center space-x-2"
-                      >
-                        <X className="w-4 h-4" />
-                        <span>Remove</span>
-                      </button>
+                      {/* Action Buttons - Right Side */}
+                      <div className="flex flex-col gap-2 flex-shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // TODO: Implement edit functionality
+                            const collectionItem = collection.find(c => c.variant_id === item.variant.id);
+                            setCollectionDetails({
+                              condition: collectionItem?.condition || '',
+                              notes: collectionItem?.notes || ''
+                            });
+                            setCollectionToAdd({ masterId: item.master.id, variantId: item.variant.id });
+                            setShowCollectionModal(true);
+                          }}
+                          className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 flex items-center space-x-2 shadow-md hover:shadow-lg hover:-translate-y-0.5"
+                        >
+                          <Edit className="w-4 h-4" />
+                          <span className="font-semibold">Edit</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeFromCollection(item.variant.id);
+                          }}
+                          className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center space-x-2 shadow-md hover:shadow-lg hover:-translate-y-0.5"
+                        >
+                          <X className="w-4 h-4" />
+                          <span className="font-semibold">Remove</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
-              </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
@@ -2494,7 +2897,7 @@ export default function VHSCollectionTracker() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {getWishlistItems().map((item, idx) => (
+                {wishlistItems.map((item, idx) => (
                   <div key={idx} className="bg-white rounded-lg shadow p-6">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
@@ -2752,6 +3155,7 @@ export default function VHSCollectionTracker() {
                 <button
                   onClick={() => {
                     setShowSubmitModal(false);
+                    setMasterFieldsLocked(false);
                     setEditingMaster(null);
                     setEditingVariant(null);
                   }}
@@ -2765,13 +3169,28 @@ export default function VHSCollectionTracker() {
                 {submitType === 'master' && (
                   <>
                     <div className="relative tmdb-search-container">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Title {masterFieldsLocked && <span className="text-xs text-purple-600">(Locked from TMDB)</span>}
+                      </label>
                       <input
                         type="text"
                         value={newSubmission.masterTitle}
                         onChange={(e) => {
                           const value = e.target.value;
-                          setNewSubmission({...newSubmission, masterTitle: value});
+                          // If fields were locked and user types, unlock them and clear other fields
+                          if (masterFieldsLocked) {
+                            setMasterFieldsLocked(false);
+                            setNewSubmission({
+                              ...newSubmission,
+                              masterTitle: value,
+                              year: '',
+                              director: '',
+                              studio: '',
+                              genre: ''
+                            });
+                          } else {
+                            setNewSubmission({...newSubmission, masterTitle: value});
+                          }
                           handleTitleSearch(value);
                         }}
                         onFocus={() => {
@@ -2819,6 +3238,7 @@ export default function VHSCollectionTracker() {
                         <input
                           type="text"
                           value={newSubmission.year}
+                          readOnly={masterFieldsLocked}
                           onChange={(e) => {
                             const value = e.target.value;
                             // Only allow numbers and limit to 4 digits
@@ -2826,7 +3246,7 @@ export default function VHSCollectionTracker() {
                               setNewSubmission({...newSubmission, year: value});
                             }
                           }}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${masterFieldsLocked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                           placeholder="1999"
                           maxLength="4"
                         />
@@ -2836,8 +3256,9 @@ export default function VHSCollectionTracker() {
                         <input
                           type="text"
                           value={newSubmission.genre}
+                          readOnly={masterFieldsLocked}
                           onChange={(e) => setNewSubmission({...newSubmission, genre: e.target.value})}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${masterFieldsLocked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                           placeholder="Action, Drama, etc."
                         />
                       </div>
@@ -2847,8 +3268,9 @@ export default function VHSCollectionTracker() {
                       <input
                         type="text"
                         value={newSubmission.director}
+                        readOnly={masterFieldsLocked}
                         onChange={(e) => setNewSubmission({...newSubmission, director: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${masterFieldsLocked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         placeholder="Director name"
                       />
                     </div>
@@ -2857,8 +3279,9 @@ export default function VHSCollectionTracker() {
                       <input
                         type="text"
                         value={newSubmission.studio}
+                        readOnly={masterFieldsLocked}
                         onChange={(e) => setNewSubmission({...newSubmission, studio: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${masterFieldsLocked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         placeholder="Production studio"
                       />
                     </div>
@@ -2868,7 +3291,7 @@ export default function VHSCollectionTracker() {
                 {!editingMaster && (
                   <div className="border-t pt-4">
                     <h3 className="font-bold text-gray-800 mb-4">
-                      {submitType === 'master' ? 'Initial Variant Details' : 'Variant Details'}
+                      {submitType === 'master' ? 'New Variant Details' : 'Variant Details'}
                     </h3>
 
                     <div className="space-y-4">
@@ -3008,8 +3431,14 @@ export default function VHSCollectionTracker() {
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-2">Subtitles</label>
                               <select
-                                value={newSubmission.subtitles === null ? '' : newSubmission.subtitles.toString()}
-                                onChange={(e) => setNewSubmission({...newSubmission, subtitles: e.target.value === '' ? null : e.target.value === 'true'})}
+                                value={newSubmission.subtitles === null ? '' : (newSubmission.subtitles ? 'true' : 'false')}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setNewSubmission({
+                                    ...newSubmission,
+                                    subtitles: value === '' ? null : value === 'true'
+                                  });
+                                }}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                               >
                                 <option value="">Unknown</option>
@@ -3279,6 +3708,7 @@ export default function VHSCollectionTracker() {
                   <button
                     onClick={() => {
                       setShowSubmitModal(false);
+                      setMasterFieldsLocked(false);
                       setEditingMaster(null);
                       setEditingVariant(null);
                     }}
@@ -3302,8 +3732,12 @@ export default function VHSCollectionTracker() {
       {showCollectionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Add to Collection</h2>
-            <p className="text-gray-600 mb-6">Add personal details about this item in your collection.</p>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              {collection.find(item => item.variant_id === collectionToAdd.variantId) ? 'Edit Collection Item' : 'Add to Collection'}
+            </h2>
+            <p className="text-gray-600 mb-6">
+              {collection.find(item => item.variant_id === collectionToAdd.variantId) ? 'Update personal details about this item.' : 'Add personal details about this item in your collection.'}
+            </p>
 
             <div className="space-y-4">
               <div>
@@ -3349,7 +3783,7 @@ export default function VHSCollectionTracker() {
                 onClick={handleAddToCollection}
                 className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
               >
-                Add to Collection
+                {collection.find(item => item.variant_id === collectionToAdd.variantId) ? 'Update' : 'Add to Collection'}
               </button>
             </div>
           </div>
@@ -3426,6 +3860,68 @@ export default function VHSCollectionTracker() {
             {/* Image Counter */}
             <div className="mt-2 bg-black bg-opacity-50 text-white px-4 py-2 rounded-full text-sm">
               {currentImageIndex + 1} / {imageGallery.length}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-orange-500">
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex flex-col items-center justify-center flex-1">
+                <div className="relative mb-4">
+                  <Film className="w-16 h-16 text-orange-400 drop-shadow-2xl" />
+                  <div className="absolute -inset-2 bg-orange-400 rounded-full opacity-20 blur-lg"></div>
+                </div>
+                <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-500 via-yellow-400 to-orange-500 mb-2">
+                  VHS VAULT
+                </h1>
+                <p className="text-xs text-gray-600 font-mono tracking-wider">REWIND • PLAY • COLLECT</p>
+              </div>
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="text-gray-700 text-center mb-6 font-semibold">
+              {isSignUp ? 'Create your account to continue' : 'Sign in to continue'}
+            </p>
+            <div>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleAuth(e)}
+                placeholder="Password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <button
+                onClick={(e) => {
+                  handleAuth(e);
+                  setShowLoginModal(false);
+                }}
+                disabled={loading}
+                className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
+              >
+                {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+              </button>
+              <button
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="w-full mt-4 text-purple-600 hover:text-purple-700 font-medium"
+              >
+                {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+              </button>
             </div>
           </div>
         </div>
