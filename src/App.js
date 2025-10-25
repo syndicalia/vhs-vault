@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import { Search, Plus, X, Film, User, LogOut, Star, Heart, ShoppingCart, Upload, Check, ThumbsUp, ThumbsDown, AlertCircle, Edit, Trash2, ChevronLeft, ChevronRight, Loader, ChevronUp, ChevronDown } from 'lucide-react';
 
-const TMDB_API_KEY = 'b28f3e3e29371a179b076c9eda73c776';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
 
 export default function VHSCollectionTracker() {
@@ -281,11 +280,14 @@ export default function VHSCollectionTracker() {
 
   const searchTMDB = async (title, year) => {
     try {
-      const yearParam = year ? `&year=${year}` : '';
-      const response = await fetch(
-        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(title)}${yearParam}`
-      );
-      const data = await response.json();
+      const { data, error } = await supabase.functions.invoke('tmdb-search', {
+        body: { query: title, year }
+      });
+
+      if (error) {
+        console.error('TMDB search error:', error);
+        return null;
+      }
 
       if (data.results && data.results.length > 0) {
         const movie = data.results[0];
@@ -318,10 +320,13 @@ export default function VHSCollectionTracker() {
     // Set new timeout for debouncing
     const timeout = setTimeout(async () => {
       try {
-        const response = await fetch(
-          `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}`
-        );
-        const data = await response.json();
+        const { data, error } = await supabase.functions.invoke('tmdb-search', {
+          body: { query: searchQuery }
+        });
+
+        if (error) {
+          throw error;
+        }
 
         if (data.results) {
           setTmdbSearchResults(data.results.slice(0, 10)); // Limit to 10 results
@@ -339,10 +344,13 @@ export default function VHSCollectionTracker() {
   };
 
   const fetchTmdbMovieDetails = async (movieId) => {
-    const response = await fetch(
-      `https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=credits`
-    );
-    const details = await response.json();
+    const { data: details, error } = await supabase.functions.invoke('tmdb-details', {
+      body: { movieId }
+    });
+
+    if (error) {
+      throw error;
+    }
 
     let director = '';
     if (details.credits?.crew) {
