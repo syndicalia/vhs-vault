@@ -2747,22 +2747,22 @@ export default function VHSCollectionTracker() {
                   )}
                 </div>
                 {collection.length === 0 ? (
-              <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
-                <div className="relative inline-block mb-6">
-                  <Film className="w-24 h-24 text-purple-400 mx-auto" />
-                  <div className="absolute inset-0 bg-purple-400 rounded-full opacity-20 blur-xl"></div>
-                </div>
-                <h3 className="text-3xl font-bold text-gray-800 mb-3">Your Vault is Empty!</h3>
-                <p className="text-gray-600 text-lg mb-6">Time to start building your VHS empire</p>
-                <button
-                  onClick={() => setView('search')}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
-                >
-                  Browse Tapes
-                </button>
-              </div>
-            ) : (
-              <div className="grid gap-4">
+                  <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
+                    <div className="relative inline-block mb-6">
+                      <Film className="w-24 h-24 text-purple-400 mx-auto" />
+                      <div className="absolute inset-0 bg-purple-400 rounded-full opacity-20 blur-xl"></div>
+                    </div>
+                    <h3 className="text-3xl font-bold text-gray-800 mb-3">Your Vault is Empty!</h3>
+                    <p className="text-gray-600 text-lg mb-6">Time to start building your VHS empire</p>
+                    <button
+                      onClick={() => setView('search')}
+                      className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                    >
+                      Browse Tapes
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
                 {sortCollectionItems(collectionItems).map((item, idx) => (
                   <div
                     key={idx}
@@ -2895,7 +2895,9 @@ export default function VHSCollectionTracker() {
                     </div>
                   </div>
                 ))}
-              </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
