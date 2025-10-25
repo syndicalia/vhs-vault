@@ -39,6 +39,7 @@ export default function VHSCollectionTracker() {
   const [collectionToAdd, setCollectionToAdd] = useState({ masterId: null, variantId: null });
   const [collectionDetails, setCollectionDetails] = useState({ condition: '', notes: '' });
   const [masterFieldsLocked, setMasterFieldsLocked] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Toast and loading states
   const [toast, setToast] = useState(null);
@@ -116,6 +117,17 @@ export default function VHSCollectionTracker() {
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
+  };
+
+  const requireAuth = (action) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return false;
+    }
+    if (typeof action === 'function') {
+      action();
+    }
+    return true;
   };
 
   useEffect(() => {
@@ -1181,57 +1193,6 @@ export default function VHSCollectionTracker() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-orange-500">
-          <div className="flex flex-col items-center justify-center mb-8">
-            <div className="relative mb-4">
-              <Film className="w-16 h-16 text-orange-400 drop-shadow-2xl" />
-              <div className="absolute -inset-2 bg-orange-400 rounded-full opacity-20 blur-lg"></div>
-            </div>
-            <h1 className="text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-500 via-yellow-400 to-orange-500 mb-2">
-              VHS VAULT
-            </h1>
-            <p className="text-sm text-gray-600 font-mono tracking-wider">REWIND • PLAY • COLLECT</p>
-          </div>
-          <p className="text-gray-700 text-center mb-6 font-semibold">
-            {isSignUp ? 'Create your account' : 'Sign in to your account'}
-          </p>
-          <div>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleAuth(e)}
-              placeholder="Password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-            <button
-              onClick={handleAuth}
-              disabled={loading}
-              className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
-            >
-              {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
-            </button>
-            <button
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="w-full mt-4 text-purple-600 hover:text-purple-700 font-medium"
-            >
-              {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -1265,22 +1226,34 @@ export default function VHSCollectionTracker() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="hidden md:flex items-center space-x-2 bg-purple-800/50 backdrop-blur-sm px-5 py-2.5 rounded-lg border border-purple-500/30">
-                <User className="w-5 h-5 text-orange-300" />
-                <span className="text-sm font-medium">{user.email}</span>
-                {isAdmin && (
-                  <span className="ml-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-purple-900 px-3 py-1 rounded-full text-xs font-black shadow-lg">
-                    ADMIN
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={handleLogout}
-                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 px-5 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2 font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5"
-              >
-                <LogOut className="w-5 h-5" />
-                <span>Logout</span>
-              </button>
+              {user ? (
+                <>
+                  <div className="hidden md:flex items-center space-x-2 bg-purple-800/50 backdrop-blur-sm px-5 py-2.5 rounded-lg border border-purple-500/30">
+                    <User className="w-5 h-5 text-orange-300" />
+                    <span className="text-sm font-medium">{user.email}</span>
+                    {isAdmin && (
+                      <span className="ml-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-purple-900 px-3 py-1 rounded-full text-xs font-black shadow-lg">
+                        ADMIN
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 px-5 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2 font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span>Logout</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 px-5 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2 font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                >
+                  <User className="w-5 h-5" />
+                  <span>Login / Sign Up</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1289,9 +1262,11 @@ export default function VHSCollectionTracker() {
       <div className="sticky top-[89px] z-30 bg-white shadow-lg border-b-2 border-gray-200">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex space-x-2 md:space-x-8 overflow-x-auto">
-            {(isAdmin
-              ? ['search', 'browse', 'collection', 'wishlist', 'marketplace', 'pending']
-              : ['search', 'collection', 'wishlist', 'pending']
+            {(!user
+              ? ['search', 'browse']
+              : isAdmin
+                ? ['search', 'browse', 'collection', 'wishlist', 'marketplace', 'pending']
+                : ['search', 'collection', 'wishlist', 'pending']
             ).map(tab => (
               <button
                 key={tab}
@@ -1573,13 +1548,13 @@ export default function VHSCollectionTracker() {
                       {/* Action Buttons */}
                       <div className="flex gap-3 border-t pt-4">
                         <button
-                          onClick={() => {
+                          onClick={() => requireAuth(() => {
                             if (isInCollection(selectedVariant.id)) {
                               removeFromCollection(selectedVariant.id);
                             } else {
                               showAddToCollectionModal(selectedMaster?.id, selectedVariant.id);
                             }
-                          }}
+                          })}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                             isInCollection(selectedVariant.id)
                               ? 'bg-red-500 text-white hover:bg-red-600'
@@ -1593,7 +1568,7 @@ export default function VHSCollectionTracker() {
                           )}
                         </button>
                         <button
-                          onClick={() => toggleWishlist(selectedMaster?.id, selectedVariant.id)}
+                          onClick={() => requireAuth(() => toggleWishlist(selectedMaster?.id, selectedVariant.id))}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                             isInWishlist(selectedVariant.id)
                               ? 'bg-pink-500 text-white hover:bg-pink-600'
@@ -1795,7 +1770,7 @@ export default function VHSCollectionTracker() {
                     </div>
                   </div>
                   <button
-                    onClick={() => { setShowSubmitModal(true); setSubmitType('variant'); }}
+                    onClick={() => requireAuth(() => { setShowSubmitModal(true); setSubmitType('variant'); })}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition flex items-center space-x-2"
                   >
                     <Plus className="w-4 h-4" />
@@ -2005,7 +1980,7 @@ export default function VHSCollectionTracker() {
                 />
               </div>
               <button
-                onClick={() => { setShowSubmitModal(true); setSubmitType('master'); }}
+                onClick={() => requireAuth(() => { setShowSubmitModal(true); setSubmitType('master'); })}
                 className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition flex items-center justify-center space-x-2"
               >
                 <Plus className="w-5 h-5" />
@@ -2152,13 +2127,13 @@ export default function VHSCollectionTracker() {
                       {/* Action Buttons */}
                       <div className="flex gap-3 border-t pt-4">
                         <button
-                          onClick={() => {
+                          onClick={() => requireAuth(() => {
                             if (isInCollection(selectedVariant.id)) {
                               removeFromCollection(selectedVariant.id);
                             } else {
                               showAddToCollectionModal(selectedMaster?.id, selectedVariant.id);
                             }
-                          }}
+                          })}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                             isInCollection(selectedVariant.id)
                               ? 'bg-red-500 text-white hover:bg-red-600'
@@ -2172,7 +2147,7 @@ export default function VHSCollectionTracker() {
                           )}
                         </button>
                         <button
-                          onClick={() => toggleWishlist(selectedMaster?.id, selectedVariant.id)}
+                          onClick={() => requireAuth(() => toggleWishlist(selectedMaster?.id, selectedVariant.id))}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                             isInWishlist(selectedVariant.id)
                               ? 'bg-pink-500 text-white hover:bg-pink-600'
@@ -2430,13 +2405,13 @@ export default function VHSCollectionTracker() {
                             {/* Action Buttons - Right Side */}
                             <div className="flex flex-col space-y-2 flex-shrink-0">
                               <button
-                                onClick={() => {
+                                onClick={() => requireAuth(() => {
                                   if (inColl) {
                                     removeFromCollection(variant.id);
                                   } else {
                                     addToCollection(selectedMaster.id, variant.id);
                                   }
-                                }}
+                                })}
                                 className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-2 ${
                                   inColl
                                     ? 'bg-red-500 text-white hover:bg-red-600'
@@ -2446,7 +2421,7 @@ export default function VHSCollectionTracker() {
                                 {inColl ? <><X className="w-4 h-4" /><span>Remove</span></> : <><Plus className="w-4 h-4" /><span>Add</span></>}
                               </button>
                               <button
-                                onClick={() => toggleWishlist(selectedMaster.id, variant.id)}
+                                onClick={() => requireAuth(() => toggleWishlist(selectedMaster.id, variant.id))}
                                 className={`px-4 py-2 rounded-lg font-medium transition flex items-center justify-center ${
                                   inWish
                                     ? 'bg-pink-500 text-white hover:bg-pink-600'
@@ -2705,7 +2680,7 @@ export default function VHSCollectionTracker() {
                           <span>Remove from Collection</span>
                         </button>
                         <button
-                          onClick={() => toggleWishlist(selectedMaster?.id, selectedVariant.id)}
+                          onClick={() => requireAuth(() => toggleWishlist(selectedMaster?.id, selectedVariant.id))}
                           className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
                             isInWishlist(selectedVariant.id)
                               ? 'bg-pink-500 text-white hover:bg-pink-600'
@@ -3885,6 +3860,68 @@ export default function VHSCollectionTracker() {
             {/* Image Counter */}
             <div className="mt-2 bg-black bg-opacity-50 text-white px-4 py-2 rounded-full text-sm">
               {currentImageIndex + 1} / {imageGallery.length}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-orange-500">
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex flex-col items-center justify-center flex-1">
+                <div className="relative mb-4">
+                  <Film className="w-16 h-16 text-orange-400 drop-shadow-2xl" />
+                  <div className="absolute -inset-2 bg-orange-400 rounded-full opacity-20 blur-lg"></div>
+                </div>
+                <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-500 via-yellow-400 to-orange-500 mb-2">
+                  VHS VAULT
+                </h1>
+                <p className="text-xs text-gray-600 font-mono tracking-wider">REWIND • PLAY • COLLECT</p>
+              </div>
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="text-gray-700 text-center mb-6 font-semibold">
+              {isSignUp ? 'Create your account to continue' : 'Sign in to continue'}
+            </p>
+            <div>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleAuth(e)}
+                placeholder="Password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <button
+                onClick={(e) => {
+                  handleAuth(e);
+                  setShowLoginModal(false);
+                }}
+                disabled={loading}
+                className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
+              >
+                {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+              </button>
+              <button
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="w-full mt-4 text-purple-600 hover:text-purple-700 font-medium"
+              >
+                {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+              </button>
             </div>
           </div>
         </div>
