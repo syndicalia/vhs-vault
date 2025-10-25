@@ -408,21 +408,28 @@ export default function VHSCollectionTracker() {
     // Check if item already exists in collection
     const existingItem = collection.find(item => item.variant_id === variantId);
 
+    console.log('addToCollection called:', { masterId, variantId, condition, notes, existingItem });
+
     if (existingItem) {
       // Update existing item
-      const { error } = await supabase
+      console.log('Updating existing collection item:', existingItem.id);
+      const { data, error } = await supabase
         .from('user_collections')
         .update({
           condition: condition,
           notes: notes
         })
         .eq('user_id', user.id)
-        .eq('variant_id', variantId);
+        .eq('variant_id', variantId)
+        .select();
+
+      console.log('Update result:', { data, error });
 
       if (error) {
         console.error('Error updating collection:', error);
         showToast('Failed to update collection item!', 'error');
       } else {
+        console.log('Update successful, reloading collection...');
         await loadUserCollection();
         setShowCollectionModal(false);
         setCollectionDetails({ condition: '', notes: '' });
@@ -430,7 +437,8 @@ export default function VHSCollectionTracker() {
       }
     } else {
       // Insert new item
-      const { error } = await supabase
+      console.log('Inserting new collection item');
+      const { data, error } = await supabase
         .from('user_collections')
         .insert([{
           user_id: user.id,
@@ -438,12 +446,16 @@ export default function VHSCollectionTracker() {
           variant_id: variantId,
           condition: condition,
           notes: notes
-        }]);
+        }])
+        .select();
+
+      console.log('Insert result:', { data, error });
 
       if (error) {
         console.error('Error adding to collection:', error);
         showToast('Failed to add to collection!', 'error');
       } else {
+        console.log('Insert successful, reloading collection...');
         await loadUserCollection();
         setShowCollectionModal(false);
         setCollectionDetails({ condition: '', notes: '' });
@@ -2500,31 +2512,241 @@ export default function VHSCollectionTracker() {
 
         {view === 'collection' && (
           <>
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-4xl font-bold text-gray-900">My Collection</h2>
-              {collection.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Sort by:</span>
-                  <select
-                    value={sortCollectionBy}
-                    onChange={(e) => setSortCollectionBy(e.target.value)}
-                    className="text-sm border border-gray-300 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="date">Release Date</option>
-                    <option value="region">Region</option>
-                    <option value="title">Title</option>
-                  </select>
+            {selectedVariant ? (
+              <div>
+                <div className="flex justify-between items-center mb-4">
                   <button
-                    onClick={() => setSortCollectionDirection(sortCollectionDirection === 'asc' ? 'desc' : 'asc')}
-                    className="p-1 hover:bg-gray-100 rounded transition"
-                    title={sortCollectionDirection === 'asc' ? 'Ascending' : 'Descending'}
+                    onClick={() => {
+                      setSelectedVariant(null);
+                      setSelectedMaster(null);
+                    }}
+                    className="text-purple-600 hover:text-purple-700 font-medium"
                   >
-                    {sortCollectionDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    ← Back to collection
                   </button>
                 </div>
-              )}
-            </div>
-            {collection.length === 0 ? (
+
+                {/* Variant Detail Card */}
+                <div className="bg-white rounded-xl shadow-2xl p-8 mb-8 border border-gray-100">
+                  <div className="flex gap-6">
+                    {/* Variant Images Gallery */}
+                    {selectedVariant.variant_images && selectedVariant.variant_images.length > 0 ? (
+                      <div className="flex-shrink-0">
+                        <img loading="lazy"
+                          src={selectedVariant.variant_images[0].image_url}
+                          alt="Variant cover"
+                          className="w-48 h-72 object-cover rounded-lg shadow-xl cursor-pointer hover:shadow-2xl hover:-translate-y-2 hover:rotate-2 transition-all duration-300 border-4 border-gray-800"
+                          onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), 0)}
+                        />
+                        {selectedVariant.variant_images.length > 1 && (
+                          <div className="grid grid-cols-3 gap-2 mt-3">
+                            {selectedVariant.variant_images.slice(1, 4).map((img, idx) => (
+                              <img loading="lazy"
+                                key={idx}
+                                src={img.image_url}
+                                alt={`Image ${idx + 2}`}
+                                className="w-full h-20 object-cover rounded border-2 border-gray-300 cursor-pointer hover:border-purple-500 transition"
+                                onClick={() => openImageGallery(selectedVariant.variant_images.map(img => img.image_url), idx + 1)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-48 h-72 bg-gradient-to-br from-purple-100 to-purple-200 rounded shadow-lg flex items-center justify-center flex-shrink-0">
+                        <Film className="w-24 h-24 text-purple-400" />
+                      </div>
+                    )}
+
+                    {/* Variant Details */}
+                    <div className="flex-1">
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                        {selectedMaster?.title || 'Unknown Title'}
+                      </h2>
+                      <p className="text-gray-600 mb-4">
+                        {selectedMaster?.director} • {selectedMaster?.year} • {selectedMaster?.genre}
+                      </p>
+
+                      <div className="border-t pt-4 mb-4">
+                        <h3 className="text-lg font-bold text-gray-700 mb-3">Variant Details</h3>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Format</p>
+                            <p className="text-gray-600">{selectedVariant.format}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Region</p>
+                            <p className="text-gray-600">{selectedVariant.region}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Release Year</p>
+                            <p className="text-gray-600">{selectedVariant.release_year}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Case Type</p>
+                            <p className="text-gray-600">{selectedVariant.case_type}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Barcode</p>
+                            <p className="text-gray-600">{selectedVariant.barcode || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Status</p>
+                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm inline-flex items-center space-x-1">
+                              <Check className="w-3 h-3" />
+                              <span>Verified</span>
+                            </span>
+                          </div>
+                          {selectedVariant.notes && (
+                            <div className="md:col-span-2">
+                              <p className="text-sm font-semibold text-gray-700">Variant Notes</p>
+                              <p className="text-gray-600 italic">{selectedVariant.notes}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Collection-specific details */}
+                        {collection.find(c => c.variant_id === selectedVariant.id) && (
+                          <div className="mt-4 pt-4 border-t bg-gradient-to-r from-purple-50 to-transparent p-4 rounded">
+                            <h4 className="text-md font-bold text-gray-700 mb-3">My Collection Details</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {collection.find(c => c.variant_id === selectedVariant.id)?.condition && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Condition</p>
+                                  <span className="bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm inline-block">
+                                    {collection.find(c => c.variant_id === selectedVariant.id).condition}
+                                  </span>
+                                </div>
+                              )}
+                              {collection.find(c => c.variant_id === selectedVariant.id)?.notes && (
+                                <div className="md:col-span-2">
+                                  <p className="text-sm font-semibold text-gray-700 mb-1">My Notes</p>
+                                  <p className="text-gray-600 italic bg-white bg-opacity-50 rounded p-2 border-l-4 border-purple-300">
+                                    {collection.find(c => c.variant_id === selectedVariant.id).notes}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Advanced Fields - Only shown if filled out */}
+                        {(selectedVariant.edition_type || selectedVariant.audio_language || selectedVariant.subtitles !== null || selectedVariant.original_rating || selectedVariant.aspect_ratio || selectedVariant.shell_color) && (
+                          <div className="mt-4 pt-4 border-t">
+                            <h4 className="text-md font-bold text-gray-700 mb-3">Advanced Attributes</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {selectedVariant.edition_type && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Edition Type</p>
+                                  <p className="text-gray-600">{selectedVariant.edition_type}</p>
+                                </div>
+                              )}
+                              {selectedVariant.audio_language && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Audio Language</p>
+                                  <p className="text-gray-600">{selectedVariant.audio_language}</p>
+                                </div>
+                              )}
+                              {selectedVariant.subtitles !== null && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Subtitles</p>
+                                  <p className="text-gray-600">{selectedVariant.subtitles ? 'Yes' : 'No'}</p>
+                                </div>
+                              )}
+                              {selectedVariant.original_rating && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Original Rating</p>
+                                  <p className="text-gray-600">{selectedVariant.original_rating}</p>
+                                </div>
+                              )}
+                              {selectedVariant.aspect_ratio && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Aspect Ratio</p>
+                                  <p className="text-gray-600">{selectedVariant.aspect_ratio}</p>
+                                </div>
+                              )}
+                              {selectedVariant.shell_color && (
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-700">Shell Color</p>
+                                  <p className="text-gray-600">{selectedVariant.shell_color}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 border-t pt-4">
+                        <button
+                          onClick={() => {
+                            const collectionItem = collection.find(c => c.variant_id === selectedVariant.id);
+                            setCollectionDetails({
+                              condition: collectionItem?.condition || '',
+                              notes: collectionItem?.notes || ''
+                            });
+                            setCollectionToAdd({ masterId: selectedMaster?.id, variantId: selectedVariant.id });
+                            setShowCollectionModal(true);
+                          }}
+                          className="px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700"
+                        >
+                          <Edit className="w-5 h-5" />
+                          <span>Edit Details</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            removeFromCollection(selectedVariant.id);
+                            setSelectedVariant(null);
+                            setSelectedMaster(null);
+                          }}
+                          className="px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 bg-red-500 text-white hover:bg-red-600"
+                        >
+                          <X className="w-5 h-5" />
+                          <span>Remove from Collection</span>
+                        </button>
+                        <button
+                          onClick={() => toggleWishlist(selectedMaster?.id, selectedVariant.id)}
+                          className={`px-6 py-3 rounded-lg font-medium transition flex items-center space-x-2 ${
+                            isInWishlist(selectedVariant.id)
+                              ? 'bg-pink-500 text-white hover:bg-pink-600'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          <Heart className={`w-5 h-5 ${isInWishlist(selectedVariant.id) ? 'fill-current' : ''}`} />
+                          <span>{isInWishlist(selectedVariant.id) ? 'In Wishlist' : 'Add to Wishlist'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-4xl font-bold text-gray-900">My Collection</h2>
+                  {collection.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">Sort by:</span>
+                      <select
+                        value={sortCollectionBy}
+                        onChange={(e) => setSortCollectionBy(e.target.value)}
+                        className="text-sm border border-gray-300 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="date">Release Date</option>
+                        <option value="region">Region</option>
+                        <option value="title">Title</option>
+                      </select>
+                      <button
+                        onClick={() => setSortCollectionDirection(sortCollectionDirection === 'asc' ? 'desc' : 'asc')}
+                        className="p-1 hover:bg-gray-100 rounded transition"
+                        title={sortCollectionDirection === 'asc' ? 'Ascending' : 'Descending'}
+                      >
+                        {sortCollectionDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {collection.length === 0 ? (
               <div className="bg-gradient-to-br from-purple-50 to-orange-50 rounded-2xl shadow-xl p-16 text-center border-4 border-dashed border-purple-300">
                 <div className="relative inline-block mb-6">
                   <Film className="w-24 h-24 text-purple-400 mx-auto" />
@@ -2545,7 +2767,10 @@ export default function VHSCollectionTracker() {
                   <div
                     key={idx}
                     className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 border-2 border-transparent hover:border-purple-200 cursor-pointer group"
-                    onClick={() => setSelectedVariant(item.variant)}
+                    onClick={() => {
+                      setSelectedMaster(item.master);
+                      setSelectedVariant(item.variant);
+                    }}
                   >
                     <div className="flex gap-6 items-start">
                       {/* Variant Images - Left Side */}
